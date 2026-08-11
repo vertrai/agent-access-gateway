@@ -1,0 +1,27 @@
+env: dev
+port: :8085
+ginMode: debug
+
+postgres:
+  dsn: postgresql://postgres@127.0.0.1:5432/agent_access_gateway_local?sslmode=disable
+admin:
+  apiKey: replace-with-a-random-admin-api-key
+
+browser:
+  apiKey: replace-with-browser-use-api-key
+  apiBaseURL: https://api.browser-use.com/api/v3
+  timeoutMinutes: 240
+  proxyCountryCode: sg
+  statusCheckInterval: 30s
+
+google:
+  creation:
+    credentialsFile: ./google-creation-service-account.json
+    adminEmail: workspace-admin@example.com
+    domain: example.com
+  authorization:
+    credentialsFile: ./google-authorization-service-account.json
+    domain: example.com
+    scopes:
+      - https://mail.google.com/
+      - https://www.googleapis.com/auth/drive

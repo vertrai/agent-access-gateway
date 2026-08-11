@@ -1,0 +1,13 @@
+.idea/
+*.lock
+*.log
+*.pid
+
+# Local runtime configuration and secrets.
+cmd/accessgateway/config.yaml
+cmd/accessgateway/*.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
