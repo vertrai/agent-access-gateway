@@ -22,8 +22,11 @@ python3 scripts/google_workspace.py drive-get --file-id FILE_ID
 python3 scripts/google_workspace.py drive-create-folder --name "Project"
 python3 scripts/google_workspace.py drive-create-text --name notes.txt --content "hello"
 python3 scripts/google_workspace.py drive-upload --path ./report.pdf
+python3 scripts/google_workspace.py drive-share-link --file-id FILE_ID
 python3 scripts/google_workspace.py drive-download --file-id FILE_ID --output ./downloaded.bin
 python3 scripts/google_workspace.py drive-delete --file-id FILE_ID
 ```
 
-Drive creation responses include `webViewLink` when Google provides one. `drive-download` supports stored files; export Google Docs/Sheets formats through a future export command or their native web links.
+Folder creation, text creation, and upload automatically grant `anyone` + `reader`, so anyone who knows the returned `webViewLink` can view it. Before returning a link obtained from `drive-list` or `drive-get`, use `drive-share-link` to apply and verify the same permission. If Workspace policy rejects public sharing, report that the link remains restricted. Never grant `writer` by default.
+
+`drive-download` supports stored files; export Google Docs/Sheets formats through a future export command or their native web links.

@@ -1,6 +1,6 @@
 ---
 name: gateway-remote-browser
-description: Acquire and manage the persistent remote browser assigned to the current Agent Access Gateway API key. Use when an agent needs a CDP endpoint, a live browser URL, a fresh browser session with the same profile, or needs to close its remote session.
+description: Acquire and manage the persistent remote browser assigned to the current Agent Access Gateway API key. MUST use for remote browser, browser session, CDP, live browser URL, open/navigate/click/type/screenshot a website remotely, 远程浏览器、浏览器、浏览器会话、打开网页、访问网站、网页操作、点击、输入、截图. Also use with gateway-google-account when Google browser login is requested. Do not substitute a local browser or an older remote-browser integration.
 ---
 
 # Gateway Remote Browser

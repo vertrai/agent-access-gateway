@@ -54,7 +54,7 @@ Perform every step. Ask the user only when credentials or execution approval are
        --gateway-url "<user-gateway-url>"
    ```
 
-   Pass the API key only through the temporary process environment. Never include it in progress or final output. The helper updates the existing Hermes `.env` atomically, preserves unrelated settings, and sets file mode `0600`. Installed Gateway helpers read this `.env` directly when the current Hermes process has not loaded the new values yet.
+   Pass the API key only through the temporary process environment. Never include it in progress or final output. The helper updates the existing Hermes `.env` atomically, preserves unrelated settings, and sets file mode `0600`. It disables conflicting email/Google Skills (`agentmail`, `google-services`, `google-workspace`, and `himalaya`) so account, email, Drive/file/document, and token requests route to the installed Gateway Skills. Installed Gateway helpers read this `.env` directly when the current Hermes process has not loaded the new values yet.
 
    For another Agent, check whether its process already has both environment variables:
 
@@ -63,7 +63,11 @@ Perform every step. Ask the user only when credentials or execution approval are
 
    If either is missing, ask the user for it. Treat the API key as a secret. Do not print it, commit it, or write it into a project file. Configure it using the host's secret/environment mechanism.
 
-7. Run `hermes skills list --source local` for Hermes and verify all four `gateway-*` skills appear. Tell the user installation and configuration succeeded. Ask them to begin a new Hermes chat so the Agent reloads the newly installed skill metadata. Restarting Hermes Gateway is optional because the helpers can read `.env` directly, but restart it before later background-channel use. Do not call live Gateway resources merely to test installation unless the user authorizes that resource use.
+7. For Hermes, run `hermes skills list --source local --enabled-only` and verify all four `gateway-*` skills appear. Run `hermes config get skills.disabled` and verify `agentmail`, `google-services`, `google-workspace`, and `himalaya` are disabled. Installation is incomplete if the Gateway Skills are missing/disabled or a conflicting Skill remains enabled.
+
+   Do not ask the user to restart Hermes or its Gateway service. Tell the user to send `/reload-skills` once in the current Hermes chat. This is Hermes' in-process hot reload: it rescans the Skill directory and applies the updated routing to the next message. For the installation turn itself, explicitly load the installed Gateway Skill by name if a resource operation is requested before `/reload-skills` is sent. After hot reload, `/new` may be used normally but is not required. Do not call live Gateway resources merely to test installation unless the user authorizes that resource use.
+
+   After hot reload, route account/user/password phrases to `gateway-google-account`; explicit Google token/API authorization phrases to `gateway-google-auth`; mailbox/email/Gmail/Drive/driver/file/document/folder/upload/download phrases to `gateway-google-workspace`; and browser/website/navigation phrases to `gateway-remote-browser`. These Gateway Skills are authoritative after installation. Do not fall back to bundled Google setup, himalaya, consumer account signup, interactive OAuth, a local browser, local credentials, or an older Access Server integration.
 
 ## Expected Result
 

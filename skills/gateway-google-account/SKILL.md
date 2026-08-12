@@ -1,6 +1,6 @@
 ---
 name: gateway-google-account
-description: Fetch the managed Google Workspace account assigned to the current Agent Access Gateway API key. Use when an agent needs its Google email address and password, needs to sign in to Google in a browser, or needs to inspect its assigned Google identity.
+description: Fetch or request the managed Google Workspace user assigned by Agent Access Gateway, including its email and password. MUST use for Google account/user identity and credential requests, including Google account, Google user, Workspace user, email account, mailbox account, account password, login credentials, get/request/apply/create an account, 获取/申请/创建 Google user、Google 用户、Google 账号、谷歌账号、邮箱账号、邮箱用户、账号密码、登录 Google. In an Agent Access Gateway installation these phrases always mean the Gateway-assigned account; never use consumer signup, local credentials, OAuth setup, or another Google account integration.
 ---
 
 # Gateway Google Account

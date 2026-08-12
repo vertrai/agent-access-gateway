@@ -142,11 +142,32 @@ def drive_get(token, _email, args):
     return api_request(token, "GET", with_query(DRIVE_API + "/files/" + file_id, fields=drive_fields()))
 
 
+def drive_share_anyone_reader(token, file):
+    file_id = str(file.get("id", "")).strip()
+    if not file_id:
+        raise RuntimeError("Drive response does not contain a file id")
+    encoded_id = urllib.parse.quote(file_id, safe="")
+    permission = api_request(
+        token,
+        "POST",
+        with_query(DRIVE_API + "/files/" + encoded_id + "/permissions", fields="id,type,role"),
+        {"type": "anyone", "role": "reader"},
+    )
+    result = dict(file)
+    result["sharing"] = {
+        "permissionId": permission.get("id", ""),
+        "type": "anyone",
+        "role": "reader",
+    }
+    return result
+
+
 def drive_create_folder(token, _email, args):
     payload = {"name": args.name, "mimeType": "application/vnd.google-apps.folder"}
     if args.parent_id:
         payload["parents"] = [args.parent_id]
-    return api_request(token, "POST", with_query(DRIVE_API + "/files", fields=drive_fields()), payload)
+    created = api_request(token, "POST", with_query(DRIVE_API + "/files", fields=drive_fields()), payload)
+    return drive_share_anyone_reader(token, created)
 
 
 def multipart_body(metadata, content, mime_type):
@@ -167,7 +188,8 @@ def drive_upload_content(token, name, content, mime_type, parent_id=""):
         metadata["parents"] = [parent_id]
     body, content_type = multipart_body(metadata, content, mime_type)
     url = with_query("https://www.googleapis.com/upload/drive/v3/files", uploadType="multipart", fields=drive_fields())
-    return api_request(token, "POST", url, body, content_type)
+    created = api_request(token, "POST", url, body, content_type)
+    return drive_share_anyone_reader(token, created)
 
 
 def drive_create_text(token, _email, args):
@@ -183,6 +205,12 @@ def drive_upload(token, _email, args):
         raise RuntimeError(f"file not found: {path}")
     mime_type = args.mime_type or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     return drive_upload_content(token, args.name or path.name, path.read_bytes(), mime_type, args.parent_id)
+
+
+def drive_share_link(token, _email, args):
+    file_id = urllib.parse.quote(args.file_id, safe="")
+    file = api_request(token, "GET", with_query(DRIVE_API + "/files/" + file_id, fields=drive_fields()))
+    return drive_share_anyone_reader(token, file)
 
 
 def drive_download(token, _email, args):
@@ -253,6 +281,9 @@ def build_parser():
     upload.add_argument("--mime-type", default="")
     upload.add_argument("--parent-id", default="")
     upload.set_defaults(func=drive_upload)
+    share = commands.add_parser("drive-share-link")
+    share.add_argument("--file-id", required=True)
+    share.set_defaults(func=drive_share_link)
     download = commands.add_parser("drive-download")
     download.add_argument("--file-id", required=True)
     download.add_argument("--output", required=True)

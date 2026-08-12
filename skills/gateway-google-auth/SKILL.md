@@ -1,6 +1,6 @@
 ---
 name: gateway-google-auth
-description: Obtain a short-lived Google OAuth access token for the Google Workspace account assigned to the current Agent Access Gateway API key. Use when an agent or another skill needs authorization for Google APIs such as Gmail or Drive.
+description: Obtain a short-lived Google OAuth access token for the Workspace user assigned by Agent Access Gateway. MUST use when the request explicitly needs a Google access token, OAuth token, bearer token, API token, Gmail API authorization, Drive API authorization, Google API credentials, 获取/申请 Google token、access token、访问令牌、API 令牌、Gmail/Drive API 授权. Use gateway-google-workspace instead for ordinary mailbox, email, Drive, file, folder, or document operations. Never start interactive OAuth or use local Google credentials.
 ---
 
 # Gateway Google Auth
