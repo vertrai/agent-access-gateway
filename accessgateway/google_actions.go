@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zyjblockchain/agent-access-gateway/accessgateway/schema"
+	"github.com/vertrai/agent-access-gateway/accessgateway/schema"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/gmail/v1"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Access Gateway Google Workspace"
+  short_description: "Operate Gmail and Drive through the gateway account"
+  default_prompt: "Use $gateway-google-workspace to work with Gmail or Google Drive."

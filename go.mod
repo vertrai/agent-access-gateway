@@ -1,4 +1,4 @@
-module github.com/zyjblockchain/agent-access-gateway
+module github.com/vertrai/agent-access-gateway
 
 go 1.25.0
 

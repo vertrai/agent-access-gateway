@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/go-co-op/gocron"
-	"github.com/zyjblockchain/agent-access-gateway/common"
+	"github.com/vertrai/agent-access-gateway/common"
 )
 
 var log = common.NewLog("access-gateway")

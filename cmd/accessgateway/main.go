@@ -9,8 +9,8 @@ import (
 	"github.com/inconshreveable/log15"
 	"github.com/spf13/viper"
 	"github.com/urfave/cli/v2"
-	"github.com/zyjblockchain/agent-access-gateway/accessgateway"
-	"github.com/zyjblockchain/agent-access-gateway/common"
+	"github.com/vertrai/agent-access-gateway/accessgateway"
+	"github.com/vertrai/agent-access-gateway/common"
 )
 
 var log = common.NewLog(Name + "-" + Version)

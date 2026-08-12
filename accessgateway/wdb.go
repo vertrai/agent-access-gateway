@@ -3,7 +3,7 @@ package accessgateway
 import (
 	"fmt"
 
-	"github.com/zyjblockchain/agent-access-gateway/accessgateway/schema"
+	"github.com/vertrai/agent-access-gateway/accessgateway/schema"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"

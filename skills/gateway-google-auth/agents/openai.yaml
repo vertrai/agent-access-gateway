@@ -1,0 +1,4 @@
+interface:
+  display_name: "Access Gateway Google Auth"
+  short_description: "Fetch a Google API access token for this agent"
+  default_prompt: "Use $gateway-google-auth to obtain a Google API access token."

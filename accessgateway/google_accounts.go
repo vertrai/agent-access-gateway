@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/zyjblockchain/agent-access-gateway/accessgateway/schema"
+	"github.com/vertrai/agent-access-gateway/accessgateway/schema"
 )
 
 func (g *AccessGateway) createWorkspaceAccount(ctx context.Context, email, password, givenName, familyName string) (schema.GoogleAccount, error) {

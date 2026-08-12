@@ -59,3 +59,33 @@ Google 使用两个独立的 Service Account：`google.creation` 只负责通过
 Google Access Token 按用户邮箱缓存在 Gateway 进程内。剩余有效期超过 5 分钟时直接复用；不足 5 分钟时自动刷新。同一用户的并发刷新会合并为一次 Google token 请求，Token 不写入 PostgreSQL。
 
 Browser 按 Gateway API Key 一对一缓存。默认 30 秒内直接复用 PostgreSQL 中的 Session 连接信息，超过 30 秒调用 Browser Use 查询真实状态；服务方已停止、删除或 Session 临近超时时，Gateway 使用该 API Key 原有的 Profile ID 创建新 Session，以继续复用 Profile 中保存的登录态。同一进程内同一 API Key 的并发创建会被串行化。
+
+## Agent Skills
+
+项目的 `skills/` 目录提供四个可独立安装的通用 Skill：
+
+- `gateway-google-account`：取得 API Key 对应的 Google 账号和密码。
+- `gateway-google-auth`：取得该账号的 Google Access Token。
+- `gateway-google-workspace`：直接操作 Gmail 和 Google Drive。
+- `gateway-remote-browser`：取得、重置和关闭远程 Browser Session。
+
+安装到支持 `SKILL.md` 的 Agent 时，将它们复制到该 Agent 的 skills 目录。例如：
+
+```bash
+./scripts/install-skills.sh ~/.codex/skills
+./scripts/install-skills.sh ~/.claude/skills
+./scripts/install-skills.sh ~/.hermes/skills
+```
+
+Agent 进程需要配置：
+
+```bash
+export AGENT_ACCESS_GATEWAY_URL="https://gateway.example.com"
+export AGENT_ACCESS_GATEWAY_API_KEY="gw_sk_..."
+```
+
+每个 Agent 或隔离身份应使用独立的 Gateway API Key，使其拥有独立的 Google User 和 Browser profile。Google Skill 脚本仅依赖 Python 3 标准库；Remote Browser Skill 明确依赖 `browser-harness`，安装脚本会通过 `uv tool install browser-harness` 自动安装。连接脚本负责 attach daemon，并在连接失效时 reset 一次后重连。
+
+也可以把公开的 [`INSTALL-SKILLS.md`](./INSTALL-SKILLS.md) 链接直接发送给 Agent，并要求它完整执行文档。Agent 会识别平台、克隆本仓库、安装并验证四个 Skill；缺少 Gateway URL 或 API Key 时才会向用户询问。
+
+在 Hermes 对话式安装中，Hermes 会询问 Gateway URL 和 API Key，然后使用 `scripts/configure-agent.py` 原子更新 `hermes config env-path` 返回的 `.env`，文件权限保持为 `0600`。Helper 在当前 Hermes 进程未重载环境变量时也会直接读取该文件。安装后新建一次 Hermes chat，使新会话加载四个 Skill 的触发信息。

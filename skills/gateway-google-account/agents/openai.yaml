@@ -1,0 +1,4 @@
+interface:
+  display_name: "Access Gateway Google Account"
+  short_description: "Fetch the Google account assigned to an agent key"
+  default_prompt: "Use $gateway-google-account to fetch the managed Google account."

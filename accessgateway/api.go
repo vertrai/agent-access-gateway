@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zyjblockchain/agent-access-gateway/accessgateway/schema"
-	"github.com/zyjblockchain/agent-access-gateway/common"
+	"github.com/vertrai/agent-access-gateway/accessgateway/schema"
+	"github.com/vertrai/agent-access-gateway/common"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
