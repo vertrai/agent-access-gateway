@@ -8,11 +8,17 @@ Perform every step. Ask the user only when credentials or execution approval are
 
 1. Identify the host as `codex`, `claude`, or `hermes`. For another host, determine its absolute skills directory.
 2. Verify that `git`, `sh`, `python3`, and `uv` are available. If `uv` is missing, install it from the official Astral instructions at <https://docs.astral.sh/uv/getting-started/installation/>. Request execution approval if the host requires it.
-3. Resolve the source directory. If this document was provided from an existing local checkout containing `scripts/install-skills.sh` and `skills/`, use that checkout and skip cloning. Otherwise create a temporary directory and clone the skills source:
+3. Resolve the source directory. If this document was provided from an existing local checkout containing `scripts/install-skills.sh` and `skills/`, use that checkout and skip cloning. Otherwise create a temporary directory and use sparse checkout to download only the Skill payload (`skills/` and `scripts/`), not the Go server source:
 
    ```bash
-   git clone --depth 1 https://github.com/vertrai/agent-access-gateway.git <temporary-directory>/agent-access-gateway
+   git clone --depth 1 --filter=blob:none --sparse \
+     https://github.com/vertrai/agent-access-gateway.git \
+     <temporary-directory>/agent-access-gateway
+   git -C <temporary-directory>/agent-access-gateway \
+     sparse-checkout set --no-cone '/skills/' '/scripts/'
    ```
+
+   Verify that `<temporary-directory>/agent-access-gateway/skills` and `<temporary-directory>/agent-access-gateway/scripts/install-skills.sh` exist. Do not expand the sparse checkout to download the Go application.
 
 4. Install for the detected host. Replace `<source-directory>` with the local checkout or cloned directory resolved above:
 

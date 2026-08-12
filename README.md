@@ -26,12 +26,27 @@ Google passwords are intentionally stored in plaintext to support repeated accou
 
 ## Agent skills
 
-Portable skills for Codex, Claude, Hermes, and other `SKILL.md`-compatible agents live under `skills/`. Install all of them into an agent's skill directory:
+Portable skills for Codex, Claude, Hermes, and other `SKILL.md`-compatible agents live under `skills/`.
+
+To install them through an Agent, send the Agent this public runbook URL:
+
+<https://raw.githubusercontent.com/vertrai/agent-access-gateway/main/INSTALL-SKILLS.md>
+
+For example, paste this message into a new Agent chat:
+
+```text
+Install the Agent Access Gateway skills by following every step in this runbook:
+https://raw.githubusercontent.com/vertrai/agent-access-gateway/main/INSTALL-SKILLS.md
+
+Ask me for the Gateway URL and API key only when the runbook requires them. Do not display the API key in your output.
+```
+
+The Agent downloads the runbook, uses Git sparse checkout to fetch only `skills/` and `scripts/` into a temporary directory, detects its host, installs all four skills, installs `browser-harness` when missing, and asks for the Gateway connection settings. The Go server source is not checked out during Skill installation.
+
+For development from an existing local checkout, install manually into an Agent's skill directory:
 
 ```bash
 ./scripts/install-skills.sh ~/.codex/skills
 ```
 
 Set `AGENT_ACCESS_GATEWAY_URL` and `AGENT_ACCESS_GATEWAY_API_KEY` in the agent process. See each skill's `SKILL.md` for its workflow.
-
-To let an Agent install the skills itself, send it the public [installation runbook](./INSTALL-SKILLS.md) and ask it to follow every step.

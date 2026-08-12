@@ -69,7 +69,22 @@ Browser 按 Gateway API Key 一对一缓存。默认 30 秒内直接复用 Postg
 - `gateway-google-workspace`：直接操作 Gmail 和 Google Drive。
 - `gateway-remote-browser`：取得、重置和关闭远程 Browser Session。
 
-安装到支持 `SKILL.md` 的 Agent 时，将它们复制到该 Agent 的 skills 目录。例如：
+推荐直接把下面的公开安装文档链接发送给 Codex、Claude、Hermes 或其他支持 Skills 的 Agent：
+
+<https://raw.githubusercontent.com/vertrai/agent-access-gateway/main/INSTALL-SKILLS.md>
+
+可以在一个新的 Agent 对话中直接发送：
+
+```text
+请严格执行下面安装文档中的全部步骤，安装 Agent Access Gateway Skills：
+https://raw.githubusercontent.com/vertrai/agent-access-gateway/main/INSTALL-SKILLS.md
+
+仅在安装文档要求配置 Gateway 时向我询问 Gateway URL 和 API Key，不要在输出中显示 API Key。
+```
+
+Agent 会读取公开文档，通过 Git sparse checkout 只把 `skills/` 和 `scripts/` 下载到临时目录，不检出 Go 服务端源码；然后识别当前平台、安装四个 Skill，并在缺少时自动安装 `browser-harness`。需要 Gateway URL 或 API Key 时，Agent 会在对话中询问用户。
+
+如果已经在本地检出本项目，并希望以开发方式手动安装，可以执行：
 
 ```bash
 ./scripts/install-skills.sh ~/.codex/skills
@@ -85,7 +100,5 @@ export AGENT_ACCESS_GATEWAY_API_KEY="gw_sk_..."
 ```
 
 每个 Agent 或隔离身份应使用独立的 Gateway API Key，使其拥有独立的 Google User 和 Browser profile。Google Skill 脚本仅依赖 Python 3 标准库；Remote Browser Skill 明确依赖 `browser-harness`，安装脚本会通过 `uv tool install browser-harness` 自动安装。连接脚本负责 attach daemon，并在连接失效时 reset 一次后重连。
-
-也可以把公开的 [`INSTALL-SKILLS.md`](./INSTALL-SKILLS.md) 链接直接发送给 Agent，并要求它完整执行文档。Agent 会识别平台、克隆本仓库、安装并验证四个 Skill；缺少 Gateway URL 或 API Key 时才会向用户询问。
 
 在 Hermes 对话式安装中，Hermes 会询问 Gateway URL 和 API Key，然后使用 `scripts/configure-agent.py` 原子更新 `hermes config env-path` 返回的 `.env`，文件权限保持为 `0600`。Helper 在当前 Hermes 进程未重载环境变量时也会直接读取该文件。安装后新建一次 Hermes chat，使新会话加载四个 Skill 的触发信息。
