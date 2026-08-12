@@ -6,6 +6,14 @@
 # Local runtime configuration and secrets.
 cmd/accessgateway/config.yaml
 cmd/accessgateway/*.json
+cmd/resouces/config.yaml
+cmd/resouces/*.json
+cmd/accessgateway/accessgateway
+cmd/resouces/resouces
+cmd/manager/config.yaml
+cmd/manager/manager
+data/telegram/
+**/data/telegram/
 .env
 .env.*
 !.env.example

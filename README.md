@@ -1,6 +1,6 @@
 # Agent Access Gateway
 
-为 Codex、Claude、Hermes 等 Agent 提供可直接使用的 Google 账号、Gmail、Google Drive 和远程浏览器。
+为 Codex、Claude、Hermes 等 Agent 提供可直接使用的 Google 账号、Gmail、Google Drive、远程浏览器和 Telegram Bot。
 
 安装 Skills 后，你可以直接对 Agent 说：
 
@@ -21,7 +21,7 @@
 
 ```text
 请按照这个安装文档安装 Agent Access Gateway Skills：
-https://raw.githubusercontent.com/vertrai/agent-access-gateway/main/INSTALL-SKILLS.md
+https://raw.githubusercontent.com/vertrai/agent-access-gateway/main/agent-skills/INSTALL.md
 
 需要配置时向我询问 Gateway URL 和 API Key。不要在输出中显示 API Key。
 ```
@@ -98,9 +98,9 @@ Hermes 用户先发送：
 
 然后重新描述任务，例如“查看 Google 邮箱”或“使用远程浏览器打开网站”。
 
-### 获取 Google 账号返回 503
+### 获取 Google 账号失败
 
-通常表示服务端账号池暂时为空。联系 Gateway 管理员补充账号后，再次执行相同请求即可。不要自行注册或切换其他 Google 账号方案。
+账号池为空时，Gateway 会自动创建一个 Workspace 账号并立即分配。首次请求可能因此耗时更长。如果自动创建失败，检查服务端返回的 Google Workspace 错误和创建凭据；不要自行注册或切换其他 Google 账号方案。
 
 ### Gateway URL 无法连接
 
@@ -121,8 +121,8 @@ http://host.docker.internal:8085
 复制示例配置，填写 PostgreSQL、Browser Use 和 Google Workspace 配置：
 
 ```bash
-cp ./cmd/accessgateway/config.example.yaml ./cmd/accessgateway/config.yaml
-go run ./cmd/accessgateway --config ./cmd/accessgateway/config.yaml
+cp ./cmd/resouces/config.example.yaml ./cmd/resouces/config.yaml
+go run ./cmd/resouces --config ./cmd/resouces/config.yaml
 ```
 
 后台管理页面：
@@ -138,3 +138,46 @@ http://<gateway-host>:8085/admin/test
 ```
 
 请勿提交 `config.yaml`、Google Service Account JSON、Gateway API Key 或其他 credentials。Google 账号创建和 Access Token 授权必须使用两个独立的 Service Account。
+
+### 服务目录
+
+- `cmd/resouces` + `resouces`：资源网关服务。Browser、Google、Telegram 的供应商实现分别位于各自子目录。
+- `cmd/manager` + `manager`：资源申请管理服务骨架，当前仅提供 `/info` 健康接口，尚未实现业务。
+- `web`：`resouces` 和 `manager` 共用的后台管理前端，两套后端均挂载 `/admin` 与 `/admin/test`。
+- `agent-skills`：Skills、安装脚本和 Agent 可执行安装文档的统一目录。
+
+### Telegram Bot 资源
+
+Telegram Bot 支持两种入池方式：管理员手动导入已有 Bot，或者授权 Telegram 用户账号后让服务通过 BotFather 自动创建。
+
+手动导入已有 Bot：
+
+```http
+POST /v1/admin/telegram/bots
+X-Admin-API-Key: <admin-key>
+Content-Type: application/json
+
+{"botToken":"<telegram-bot-token>","username":"example_bot"}
+```
+
+Agent 使用 Gateway API Key 获取固定分配给该 Key 的 Bot；账号池为空时返回 `503`：
+
+```http
+GET /v1/telegram-bot
+Authorization: Bearer <gateway-api-key>
+```
+
+同一个 Gateway API Key 最多绑定一个 Telegram Bot，重复获取会返回同一个 Token。管理员列表接口 `GET /v1/admin/telegram/bots` 只返回脱敏 Token。
+
+自动创建流程需要管理员依次调用：
+
+```text
+POST /v1/admin/telegram/auth/init       # phone、apiId、apiHash，发送验证码
+POST /v1/admin/telegram/auth/verify     # accountId、code
+POST /v1/admin/telegram/auth/2fa        # 仅账号启用 2FA 时调用
+GET  /v1/admin/telegram/auth/status
+GET  /v1/admin/telegram/auth/accounts
+POST /v1/admin/telegram/bots/create     # body: {"count": 1}
+```
+
+授权完成后，服务每分钟检查一次可用 Bot 数量，并通过 BotFather 自动补充到 `telegram.minAvailableBots`。遇到 Telegram `FLOOD_WAIT` 会进入冷却期，期间自动创建接口返回 `429`，而手动导入仍然可用。Telegram MTProto Session 保存在 `telegram.dataDir`，必须使用持久化私有目录，不能提交到 Git。
