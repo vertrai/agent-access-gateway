@@ -3,7 +3,7 @@ port: :8085
 ginMode: debug
 
 postgres:
-  dsn: postgresql://postgres@127.0.0.1:5432/agent_access_gateway_local?sslmode=disable
+  dsn: postgresql://postgres@127.0.0.1:5432/hub_local?sslmode=disable
 admin:
   apiKey: replace-with-a-random-admin-api-key
 

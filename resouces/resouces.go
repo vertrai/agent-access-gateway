@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/go-co-op/gocron"
-	"github.com/vertrai/agent-access-gateway/common"
-	resourcebrowser "github.com/vertrai/agent-access-gateway/resouces/browser"
-	resourcegoogle "github.com/vertrai/agent-access-gateway/resouces/google"
-	resourcetelegram "github.com/vertrai/agent-access-gateway/resouces/telegram"
+	"github.com/vertrai/hub/common"
+	resourcebrowser "github.com/vertrai/hub/resouces/browser"
+	resourcegoogle "github.com/vertrai/hub/resouces/google"
+	resourcetelegram "github.com/vertrai/hub/resouces/telegram"
 )
 
 var log = common.NewLog("resouces")

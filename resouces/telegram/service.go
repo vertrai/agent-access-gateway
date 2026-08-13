@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/vertrai/agent-access-gateway/resouces/schema"
+	"github.com/vertrai/hub/resouces/schema"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

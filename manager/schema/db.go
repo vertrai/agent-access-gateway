@@ -1,0 +1,59 @@
+package schema
+
+import "time"
+
+const (
+	PodStatusSpawned = "spawned"
+	PodStatusRunning = "running"
+	PodStatusStopped = "stopped"
+	PodStatusFailed  = "failed"
+)
+
+type User struct {
+	ID        string    `gorm:"primaryKey;size:80" json:"id"`
+	Name      string    `gorm:"size:200;not null" json:"name"`
+	Status    string    `gorm:"size:24;not null;index" json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+func (User) TableName() string { return "manager_users" }
+
+type AccessKey struct {
+	ID            string    `gorm:"primaryKey;size:80" json:"id"`
+	UserID        string    `gorm:"size:80;not null;index" json:"userId"`
+	ResourceKeyID string    `gorm:"size:80;not null;uniqueIndex" json:"resourceKeyId"`
+	KeyPrefix     string    `gorm:"size:16;not null" json:"keyPrefix"`
+	Secret        string    `gorm:"type:text;not null" json:"-"`
+	Status        string    `gorm:"size:24;not null;index" json:"status"`
+	AssignedPodID *string   `gorm:"size:80;uniqueIndex" json:"assignedPodId,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}
+
+func (AccessKey) TableName() string { return "manager_access_keys" }
+
+type HymatrixPod struct {
+	ID            string    `gorm:"primaryKey;size:80" json:"id"`
+	UserID        string    `gorm:"size:80;not null;index" json:"userId"`
+	Name          string    `gorm:"size:200;not null" json:"name"`
+	RuntimeType   string    `gorm:"size:80;not null" json:"runtimeType"`
+	PID           string    `gorm:"size:160;uniqueIndex" json:"pid"`
+	Status        string    `gorm:"size:24;not null;index" json:"status"`
+	NodeURL       string    `gorm:"type:text;not null" json:"nodeUrl"`
+	PrivateKey    string    `gorm:"type:text;not null" json:"-"`
+	Module        string    `gorm:"type:text;not null" json:"module"`
+	Scheduler     string    `gorm:"type:text;not null" json:"scheduler"`
+	LLMAPIKey     string    `gorm:"type:text" json:"-"`
+	LLMBaseURL    string    `gorm:"type:text" json:"llmBaseUrl,omitempty"`
+	LLMModel      string    `gorm:"size:200" json:"llmModel,omitempty"`
+	LLMProvider   string    `gorm:"size:80" json:"llmProvider,omitempty"`
+	GatewayAPIKey string    `gorm:"type:text" json:"-"`
+	AccessKeyID   string    `gorm:"size:80;not null;uniqueIndex" json:"accessKeyId"`
+	BotToken      string    `gorm:"type:text" json:"-"`
+	Error         string    `gorm:"type:text" json:"error,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}
+
+func (HymatrixPod) TableName() string { return "manager_hymatrix_pods" }

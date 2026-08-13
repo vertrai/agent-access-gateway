@@ -9,19 +9,17 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/vertrai/agent-access-gateway/common"
-	resourcebrowser "github.com/vertrai/agent-access-gateway/resouces/browser"
-	resourcegoogle "github.com/vertrai/agent-access-gateway/resouces/google"
-	"github.com/vertrai/agent-access-gateway/resouces/schema"
-	resourcetelegram "github.com/vertrai/agent-access-gateway/resouces/telegram"
-	gatewayweb "github.com/vertrai/agent-access-gateway/web"
+	"github.com/vertrai/hub/common"
+	resourcebrowser "github.com/vertrai/hub/resouces/browser"
+	resourcegoogle "github.com/vertrai/hub/resouces/google"
+	"github.com/vertrai/hub/resouces/schema"
+	resourcetelegram "github.com/vertrai/hub/resouces/telegram"
 	"gorm.io/gorm"
 )
 
 const gatewayPrincipalContext = "gatewayPrincipal"
 
 type gatewayPrincipal struct {
-	User      schema.GatewayUser
 	AccessKey schema.AccessKey
 }
 
@@ -29,10 +27,10 @@ func (g *Resouces) router() *gin.Engine {
 	r := gin.New()
 	r.Use(common.RequestLogger(log), gin.Recovery(), common.CORSMiddleware())
 	r.GET("/info", g.info)
-	gatewayweb.RegisterRoutes(r)
-	admin := r.Group("/v1/admin", g.requireAdmin)
-	admin.POST("/users", g.createUserAccessKey)
-	admin.GET("/users", g.listUsers)
+	internal := r.Group("/v1/internal", g.requireAdmin)
+	internal.POST("/access-keys", g.createAccessKey)
+	internal.GET("/access-keys", g.listAccessKeys)
+	admin := internal
 	admin.POST("/google/accounts", g.createGoogleAccount)
 	admin.POST("/google/accounts/batch", g.createGoogleAccountsBatch)
 	admin.GET("/google/accounts", g.listGoogleAccounts)
@@ -56,47 +54,34 @@ func (g *Resouces) router() *gin.Engine {
 	return r
 }
 
-func (g *Resouces) listUsers(c *gin.Context) {
+func (g *Resouces) listAccessKeys(c *gin.Context) {
 	type accessKeySummary struct {
 		schema.AccessKey
 		GoogleEmail string `json:"googleEmail,omitempty"`
 		BrowserID   string `json:"browserId,omitempty"`
 		TelegramBot string `json:"telegramBot,omitempty"`
 	}
-	type userSummary struct {
-		schema.GatewayUser
-		AccessKeys []accessKeySummary `json:"accessKeys"`
-	}
-	var users []schema.GatewayUser
-	if err := g.wdb.Db.Order("created_at desc").Find(&users).Error; err != nil {
+	var keys []schema.AccessKey
+	if err := g.wdb.Db.Order("created_at desc").Find(&keys).Error; err != nil {
 		g.internalError(c, err)
 		return
 	}
-	items := make([]userSummary, 0, len(users))
-	for _, user := range users {
-		item := userSummary{GatewayUser: user, AccessKeys: []accessKeySummary{}}
-		var keys []schema.AccessKey
-		if err := g.wdb.Db.Where("user_id = ?", user.ID).Order("created_at desc").Find(&keys).Error; err != nil {
-			g.internalError(c, err)
-			return
+	items := make([]accessKeySummary, 0, len(keys))
+	for _, key := range keys {
+		keyItem := accessKeySummary{AccessKey: key}
+		var account schema.GoogleAccount
+		if err := g.wdb.Db.Where("assigned_access_key_id = ?", key.ID).First(&account).Error; err == nil {
+			keyItem.GoogleEmail = account.Email
 		}
-		for _, key := range keys {
-			keyItem := accessKeySummary{AccessKey: key}
-			var account schema.GoogleAccount
-			if err := g.wdb.Db.Where("assigned_access_key_id = ?", key.ID).First(&account).Error; err == nil {
-				keyItem.GoogleEmail = account.Email
-			}
-			var browser schema.Browser
-			if err := g.wdb.Db.Where("access_key_id = ?", key.ID).First(&browser).Error; err == nil {
-				keyItem.BrowserID = browser.ID
-			}
-			var telegramBot schema.TelegramBot
-			if err := g.wdb.Db.Where("assigned_access_key_id = ?", key.ID).First(&telegramBot).Error; err == nil {
-				keyItem.TelegramBot = telegramBot.Username
-			}
-			item.AccessKeys = append(item.AccessKeys, keyItem)
+		var browser schema.Browser
+		if err := g.wdb.Db.Where("access_key_id = ?", key.ID).First(&browser).Error; err == nil {
+			keyItem.BrowserID = browser.ID
 		}
-		items = append(items, item)
+		var telegramBot schema.TelegramBot
+		if err := g.wdb.Db.Where("assigned_access_key_id = ?", key.ID).First(&telegramBot).Error; err == nil {
+			keyItem.TelegramBot = telegramBot.Username
+		}
+		items = append(items, keyItem)
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
@@ -108,7 +93,7 @@ func (g *Resouces) runAPI(endpoint string) {
 	}
 }
 func (g *Resouces) info(c *gin.Context) {
-	c.JSON(200, gin.H{"name": "agent-access-gateway", "env": g.env})
+	c.JSON(200, gin.H{"name": "hub", "env": g.env})
 }
 func (g *Resouces) requireAdmin(c *gin.Context) {
 	got := firstNonEmpty(c.GetHeader("X-Admin-API-Key"), bearer(c.GetHeader("Authorization")))
@@ -117,16 +102,15 @@ func (g *Resouces) requireAdmin(c *gin.Context) {
 	}
 }
 
-func (g *Resouces) createUserAccessKey(c *gin.Context) {
+func (g *Resouces) createAccessKey(c *gin.Context) {
 	var req struct {
-		UserID string `json:"userId"`
-		Name   string `json:"name"`
+		OwnerUserID string `json:"ownerUserId"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.UserID) == "" {
-		c.JSON(400, gin.H{"error": "userId is required"})
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.OwnerUserID) == "" {
+		c.JSON(400, gin.H{"error": "ownerUserId is required"})
 		return
 	}
-	userID := strings.TrimSpace(req.UserID)
+	ownerUserID := strings.TrimSpace(req.OwnerUserID)
 	key, err := newAccessKey()
 	if err != nil {
 		g.internalError(c, err)
@@ -137,32 +121,13 @@ func (g *Resouces) createUserAccessKey(c *gin.Context) {
 		g.internalError(c, err)
 		return
 	}
-	row := schema.GatewayUser{ID: userID, Name: firstNonEmpty(req.Name, userID), Status: schema.StatusActive}
-	accessKey := schema.AccessKey{ID: keyID, UserID: userID, KeyHash: hashSecret(key), KeyPrefix: secretPrefix(key), Status: schema.StatusActive}
-	err = g.wdb.Db.Transaction(func(tx *gorm.DB) error {
-		var existing schema.GatewayUser
-		findErr := tx.First(&existing, "id = ?", userID).Error
-		if errors.Is(findErr, gorm.ErrRecordNotFound) {
-			if err := tx.Create(&row).Error; err != nil {
-				return err
-			}
-		} else if findErr != nil {
-			return findErr
-		} else {
-			row = existing
-			row.Name = firstNonEmpty(req.Name, row.Name)
-			row.Status = schema.StatusActive
-			if err := tx.Save(&row).Error; err != nil {
-				return err
-			}
-		}
-		return tx.Create(&accessKey).Error
-	})
+	accessKey := schema.AccessKey{ID: keyID, OwnerUserID: ownerUserID, KeyHash: hashSecret(key), KeyPrefix: secretPrefix(key), Status: schema.StatusActive}
+	err = g.wdb.Db.Create(&accessKey).Error
 	if err != nil {
 		g.internalError(c, err)
 		return
 	}
-	c.JSON(200, gin.H{"user": row, "accessKey": accessKey, "gatewayApiKey": key})
+	c.JSON(200, gin.H{"accessKey": accessKey, "gatewayApiKey": key})
 }
 
 func (g *Resouces) createGoogleAccount(c *gin.Context) {
@@ -485,14 +450,9 @@ func (g *Resouces) requireGatewayAPIKey(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "invalid gateway api key"})
 		return
 	}
-	var user schema.GatewayUser
-	if err := g.wdb.Db.Where("id = ? AND status = ?", key.UserID, schema.StatusActive).First(&user).Error; err != nil {
-		c.AbortWithStatusJSON(401, gin.H{"error": "gateway user is inactive"})
-		return
-	}
 	now := time.Now()
 	_ = g.wdb.Db.Model(&key).Update("last_used_at", now).Error
-	c.Set(gatewayPrincipalContext, gatewayPrincipal{User: user, AccessKey: key})
+	c.Set(gatewayPrincipalContext, gatewayPrincipal{AccessKey: key})
 }
 
 func mustGatewayPrincipal(c *gin.Context) gatewayPrincipal {

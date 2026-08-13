@@ -1,24 +1,24 @@
 # Install Agent Access Gateway Skills
 
-This document is an executable runbook for Codex, Claude Code, Hermes, and other agents that support `SKILL.md` directories.
+This document is an executable runbook for Codex, Claude Code, Hermes, pi coding agent, and other agents that support `SKILL.md` directories.
 
 ## Instructions for the Agent
 
 Perform every step. Ask the user only when credentials or execution approval are required.
 
-1. Identify the host as `codex`, `claude`, or `hermes`. For another host, determine its absolute skills directory.
+1. Identify the host as `codex`, `claude`, `hermes`, or `pi`. For another host, determine its absolute skills directory.
 2. Verify that `git`, `sh`, `python3`, and `uv` are available. If `uv` is missing, install it from the official Astral instructions at <https://docs.astral.sh/uv/getting-started/installation/>. Request execution approval if the host requires it.
 3. Resolve the source directory. If this document was provided from an existing local checkout containing `agent-skills/scripts/install-skills.sh` and `agent-skills/skills/`, use its `agent-skills` directory and skip cloning. Otherwise create a temporary directory and use sparse checkout to download only `agent-skills/`, not the Go server source:
 
    ```bash
    git clone --depth 1 --filter=blob:none --sparse \
-     https://github.com/vertrai/agent-access-gateway.git \
-     <temporary-directory>/agent-access-gateway
-   git -C <temporary-directory>/agent-access-gateway \
+     https://github.com/vertrai/hub.git \
+     <temporary-directory>/hub
+   git -C <temporary-directory>/hub \
      sparse-checkout set --no-cone '/agent-skills/'
    ```
 
-   Set `<source-directory>` to `<temporary-directory>/agent-access-gateway/agent-skills`. Verify its `skills/` and `scripts/install-skills.sh` exist. Do not expand the sparse checkout to download the Go application.
+   Set `<source-directory>` to `<temporary-directory>/hub/agent-skills`. Verify its `skills/` and `scripts/install-skills.sh` exist. Do not expand the sparse checkout to download the Go application.
 
 4. Install for the detected host. Replace `<source-directory>` with the local checkout or cloned directory resolved above:
 
@@ -26,6 +26,7 @@ Perform every step. Ask the user only when credentials or execution approval are
    <source-directory>/scripts/install-skills.sh --agent codex
    <source-directory>/scripts/install-skills.sh --agent claude
    <source-directory>/scripts/install-skills.sh --agent hermes
+   <source-directory>/scripts/install-skills.sh --agent pi
    ```
 
    Run exactly one command. For another host, pass its absolute skills directory instead:
@@ -56,12 +57,14 @@ Perform every step. Ask the user only when credentials or execution approval are
 
    Pass the API key only through the temporary process environment. Never include it in progress or final output. The helper updates the existing Hermes `.env` atomically, preserves unrelated settings, and sets file mode `0600`. It disables conflicting email/Google Skills (`agentmail`, `google-services`, `google-workspace`, and `himalaya`) so account, email, Drive/file/document, and token requests route to the installed Gateway Skills. Installed Gateway helpers read this `.env` directly when the current Hermes process has not loaded the new values yet.
 
-   For another Agent, check whether its process already has both environment variables:
+   For pi coding agent and other Agents, check whether its process already has both environment variables:
 
    - `AGENT_ACCESS_GATEWAY_URL`
    - `AGENT_ACCESS_GATEWAY_API_KEY`
 
    If either is missing, ask the user for it. Treat the API key as a secret. Do not print it, commit it, or write it into a project file. Configure it using the host's secret/environment mechanism.
+
+   For pi coding agent, the installer uses `${PI_CODING_AGENT_DIR:-~/.pi/agent}/skills`. After installation, send `/reload` in the current pi session to reload skills without restarting it.
 
 7. For Hermes, run `hermes skills list --source local --enabled-only` and verify all four `gateway-*` skills appear. Run `hermes config get skills.disabled` and verify `agentmail`, `google-services`, `google-workspace`, and `himalaya` are disabled. Installation is incomplete if the Gateway Skills are missing/disabled or a conflicting Skill remains enabled.
 

@@ -1,6 +1,6 @@
-# Agent Access Gateway
+# Hub
 
-为 Codex、Claude、Hermes 等 Agent 提供可直接使用的 Google 账号、Gmail、Google Drive、远程浏览器和 Telegram Bot。
+为 Codex、Claude、Hermes、pi coding agent 等 Agent 提供可直接使用的 Google 账号、Gmail、Google Drive、远程浏览器和 Telegram Bot。
 
 安装 Skills 后，你可以直接对 Agent 说：
 
@@ -12,7 +12,7 @@
 
 ## 安装 Skills
 
-安装前，请向 Agent Access Gateway 管理员获取：
+安装前，请向 Hub 管理员获取：
 
 - Gateway URL
 - Gateway API Key（以 `gw_sk_` 开头）
@@ -20,8 +20,8 @@
 然后把下面这段话完整发送给你的 Agent：
 
 ```text
-请按照这个安装文档安装 Agent Access Gateway Skills：
-https://raw.githubusercontent.com/vertrai/agent-access-gateway/main/agent-skills/INSTALL.md
+请按照这个安装文档安装 Hub Skills：
+https://raw.githubusercontent.com/vertrai/hub/main/agent-skills/INSTALL.md
 
 需要配置时向我询问 Gateway URL 和 API Key。不要在输出中显示 API Key。
 ```
@@ -37,6 +37,16 @@ Agent 会自动完成下载、安装和配置。它询问时，再分别提供 G
 ```
 
 不需要重启 Hermes 服务。热加载完成后即可直接使用。
+
+### pi coding agent 用户
+
+Skills 默认安装到 `~/.pi/agent/skills/`（也支持 `PI_CODING_AGENT_DIR`）。安装完成后，在当前 pi 对话中发送：
+
+```text
+/reload
+```
+
+重新加载完成后即可直接使用，不需要重启 pi。
 
 ## 可以使用的能力
 
@@ -116,35 +126,44 @@ http://host.docker.internal:8085
 
 ## 服务端开发
 
-以下内容仅供部署 Agent Access Gateway 服务的管理员和开发者使用；普通 Skills 用户不需要执行。
+以下内容仅供部署 Hub 服务的管理员和开发者使用；普通 Skills 用户不需要执行。
 
-复制示例配置，填写 PostgreSQL、Browser Use 和 Google Workspace 配置：
+分别复制两个服务的示例配置。Resources 填写资源供应商配置；Manager 填写自己的 PostgreSQL、管理员密钥、Resources 内网地址和 Hymatrix 配置：
 
 ```bash
 cp ./cmd/resouces/config.example.yaml ./cmd/resouces/config.yaml
+cp ./cmd/manager/config.example.yaml ./cmd/manager/config.yaml
 go run ./cmd/resouces --config ./cmd/resouces/config.yaml
+# 另一个终端
+go run ./cmd/manager --config ./cmd/manager/config.yaml
 ```
 
 后台管理页面：
 
 ```text
-http://<gateway-host>:8085/admin
+http://<manager-host>:8086/admin
 ```
 
 API 测试页面：
 
 ```text
-http://<gateway-host>:8085/admin/test
+http://<manager-host>:8086/admin/test
 ```
 
 请勿提交 `config.yaml`、Google Service Account JSON、Gateway API Key 或其他 credentials。Google 账号创建和 Access Token 授权必须使用两个独立的 Service Account。
 
 ### 服务目录
 
-- `cmd/resouces` + `resouces`：资源网关服务。Browser、Google、Telegram 的供应商实现分别位于各自子目录。
-- `cmd/manager` + `manager`：资源申请管理服务骨架，当前仅提供 `/info` 健康接口，尚未实现业务。
-- `web`：`resouces` 和 `manager` 共用的后台管理前端，两套后端均挂载 `/admin` 与 `/admin/test`。
+- `cmd/resouces` + `resouces`：内网资源服务。负责 Gateway API Key 鉴权与 Browser、Google、Telegram 资源生命周期，不挂载后台页面。
+- `cmd/manager` + `manager`：管理控制面。负责用户、API Key 创建、Resources 内网代理，以及 Hymatrix Pod 的 spawn/start/stop。
+- `web`：只挂载到 Manager。页面按 Manager 管理功能与 Resources 资源池功能分区，浏览器不会接触 Resources 内部密钥和内网地址。
 - `agent-skills`：Skills、安装脚本和 Agent 可执行安装文档的统一目录。
+
+两个服务可以使用同一个 PostgreSQL 数据库。Manager 固定使用 `manager_users`、`manager_hymatrix_pods`；Resources 使用各自的资源表，服务之间不直接查询对方的数据表。
+
+Hymatrix 的 Node URL、签名私钥、Module、Scheduler 与 LLM 参数由管理员在 `/admin/hymatrix` 创建 Pod 时填写，并按 Pod 保存到 `manager_hymatrix_pods`，不再放在 Manager 的 YAML 配置中。私钥、LLM Key、Gateway Key 和 Bot Token 不会通过列表接口返回。
+
+Manager 会把新创建 Gateway API Key 的明文与 Resources Key ID 保存到 `manager_access_keys`，用于在创建 Pod 时选择。一个 Key 绑定一个 Pod 后即标记为已使用，不能再次选择。旧版本只在 Resources 保存哈希的 Key 无法恢复明文，需要重新创建后才能用于 Pod。Hymatrix 页面内置的 ETH 私钥是公开测试私钥，只能用于测试环境。
 
 ### Telegram Bot 资源
 
@@ -154,7 +173,7 @@ Telegram Bot 支持两种入池方式：管理员手动导入已有 Bot，或者
 
 ```http
 POST /v1/admin/telegram/bots
-X-Admin-API-Key: <admin-key>
+Authorization: Bearer <manager-admin-key>
 Content-Type: application/json
 
 {"botToken":"<telegram-bot-token>","username":"example_bot"}
@@ -167,7 +186,7 @@ GET /v1/telegram-bot
 Authorization: Bearer <gateway-api-key>
 ```
 
-同一个 Gateway API Key 最多绑定一个 Telegram Bot，重复获取会返回同一个 Token。管理员列表接口 `GET /v1/admin/telegram/bots` 只返回脱敏 Token。
+同一个 Gateway API Key 最多绑定一个 Telegram Bot，重复获取会返回同一个 Token。Manager 的管理员列表接口 `GET /v1/admin/telegram/bots` 会代理到 Resources，并只返回脱敏 Token。
 
 自动创建流程需要管理员依次调用：
 

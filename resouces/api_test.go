@@ -3,7 +3,6 @@ package resouces
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -17,20 +16,13 @@ func TestInfo(t *testing.T) {
 	}
 }
 
-func TestAdminPage(t *testing.T) {
+func TestAdminPageIsNotMounted(t *testing.T) {
 	g := New("test", Config{}, nil)
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/admin", nil)
 	g.router().ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusOK {
+	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("status = %d", recorder.Code)
-	}
-	if contentType := recorder.Header().Get("Content-Type"); contentType != "text/html; charset=utf-8" {
-		t.Fatalf("content type = %q", contentType)
-	}
-	body := recorder.Body.String()
-	if !strings.Contains(body, "资源总览") || !strings.Contains(body, "/admin/telegram") {
-		t.Fatalf("admin page does not expose the resource console navigation")
 	}
 }
 
@@ -39,7 +31,7 @@ func TestTelegramAdminPage(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/admin/telegram", nil)
 	g.router().ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "BotFather") {
+	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("telegram admin page is unavailable")
 	}
 }
@@ -49,18 +41,15 @@ func TestAdminTestPage(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/admin/test", nil)
 	g.router().ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusOK {
+	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("status = %d", recorder.Code)
-	}
-	if contentType := recorder.Header().Get("Content-Type"); contentType != "text/html; charset=utf-8" {
-		t.Fatalf("content type = %q", contentType)
 	}
 }
 
 func TestAdminRequiresKey(t *testing.T) {
 	g := New("test", Config{AdminAPIKey: "secret"}, nil)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/v1/admin/users", nil)
+	request := httptest.NewRequest(http.MethodPost, "/v1/internal/access-keys", nil)
 	g.router().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d", recorder.Code)
@@ -69,7 +58,7 @@ func TestAdminRequiresKey(t *testing.T) {
 
 func TestTelegramAdminRoutesRequireKey(t *testing.T) {
 	g := New("test", Config{AdminAPIKey: "secret"}, nil)
-	for _, path := range []string{"/v1/admin/telegram/auth/init", "/v1/admin/telegram/bots/create"} {
+	for _, path := range []string{"/v1/internal/telegram/auth/init", "/v1/internal/telegram/bots/create"} {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodPost, path, nil)
 		g.router().ServeHTTP(recorder, request)

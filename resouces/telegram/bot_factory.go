@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gotd/td/tg"
-	"github.com/vertrai/agent-access-gateway/resouces/schema"
+	"github.com/vertrai/hub/resouces/schema"
 )
 
 var botTokenRe = regexp.MustCompile(`\d{8,12}:[A-Za-z0-9_-]{35,}`)

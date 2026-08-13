@@ -3,7 +3,7 @@ set -eu
 
 usage() {
   echo "Usage: $0 <agent-skills-directory>" >&2
-  echo "       $0 --agent codex|claude|hermes" >&2
+  echo "       $0 --agent codex|claude|hermes|pi" >&2
   exit 2
 }
 
@@ -17,6 +17,9 @@ agent_skills_dir() {
       ;;
     hermes)
       printf '%s\n' "${HERMES_HOME:-$HOME/.hermes}/skills"
+      ;;
+    pi)
+      printf '%s\n' "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/skills"
       ;;
     *)
       usage

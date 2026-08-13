@@ -1,30 +1,46 @@
-// Package manager provides the resource-application management service.
-// Business workflows intentionally remain empty until their API is specified.
 package manager
 
 import (
 	"context"
 	"net/http"
+	"time"
 
-	"github.com/vertrai/agent-access-gateway/common"
+	"github.com/vertrai/hub/common"
 )
 
 var log = common.NewLog("manager")
 
-type Config struct{}
+type Config struct {
+	AdminAPIKey string
+	Resources   ResourcesConfig
+}
+
+type ResourcesConfig struct {
+	BaseURL, AdminAPIKey string
+	Timeout              time.Duration
+}
 
 type Manager struct {
 	env       string
 	config    Config
+	wdb       *Wdb
+	resources *ResourcesClient
 	apiServer *http.Server
 }
 
-func New(env string, config Config) *Manager { return &Manager{env: env, config: config} }
+func New(env string, config Config, wdb *Wdb) (*Manager, error) {
+	if config.Resources.Timeout <= 0 {
+		config.Resources.Timeout = 30 * time.Second
+	}
+	return &Manager{env: env, config: config, wdb: wdb, resources: NewResourcesClient(config.Resources)}, nil
+}
 
 func (m *Manager) Run(endpoint string) { go m.runJobs(); go m.runAPI(endpoint) }
-
 func (m *Manager) Close() {
 	if m.apiServer != nil {
 		_ = m.apiServer.Shutdown(context.Background())
+	}
+	if m.wdb != nil {
+		_ = m.wdb.Close()
 	}
 }

@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Shared Agent Access Gateway API test UI. -->
+<!-- Manager-mounted Agent Access Gateway resource API test UI. -->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -20,7 +20,7 @@
   </style>
 </head>
 <body><main>
-  <header><div><h1>Gateway API 测试台</h1><p>使用用户的 Gateway API Key 验证 Google、Browser 和 Telegram Bot。</p></div><button class="secondary" onclick="location.href='/admin'">返回控制台</button></header>
+  <header><div><h1>Resources API 测试台</h1><p>页面仍只访问 Manager，由 Manager 使用内网地址转发到 Resources。</p></div><button class="secondary" onclick="location.href='/admin'">返回 Manager 控制台</button></header>
   <section class="card key-card"><label>Gateway API Key<input id="gatewayKey" type="password" autocomplete="off" placeholder="gw_sk_..." required></label><button id="clearKey" class="secondary">清除 Key</button></section>
   <section class="tests">
     <article class="card test-card" data-test="googleUser"><div class="eyebrow">GET /v1/google-user</div><div class="test-head"><h2>Google User</h2><button data-run>获取账号</button></div><p class="description">首次调用会分配账号，之后返回同一邮箱和密码。</p><div class="result"><div class="result-head"><span data-meta></span><button class="secondary" data-copy>复制响应</button></div><pre data-output></pre></div></article>

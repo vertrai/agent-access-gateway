@@ -14,7 +14,7 @@ import (
 	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
-	"github.com/vertrai/agent-access-gateway/resouces/schema"
+	"github.com/vertrai/hub/resouces/schema"
 )
 
 type AuthInitResult struct {

@@ -10,23 +10,15 @@ const (
 	StatusRevoked   = "revoked"
 )
 
-type GatewayUser struct {
-	ID        string    `gorm:"primaryKey;size:80" json:"id"`
-	Name      string    `gorm:"size:200;not null" json:"name"`
-	Status    string    `gorm:"size:24;not null;index" json:"status"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-}
-
 type AccessKey struct {
-	ID         string     `gorm:"primaryKey;size:80" json:"id"`
-	UserID     string     `gorm:"size:80;not null;index" json:"userId"`
-	KeyHash    string     `gorm:"size:64;not null;uniqueIndex" json:"-"`
-	KeyPrefix  string     `gorm:"size:16;not null" json:"keyPrefix"`
-	Status     string     `gorm:"size:24;not null;index" json:"status"`
-	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
-	CreatedAt  time.Time  `json:"createdAt"`
-	UpdatedAt  time.Time  `json:"updatedAt"`
+	ID          string     `gorm:"primaryKey;size:80" json:"id"`
+	OwnerUserID string     `gorm:"size:80;not null;index" json:"ownerUserId"`
+	KeyHash     string     `gorm:"size:64;not null;uniqueIndex" json:"-"`
+	KeyPrefix   string     `gorm:"size:16;not null" json:"keyPrefix"`
+	Status      string     `gorm:"size:24;not null;index" json:"status"`
+	LastUsedAt  *time.Time `json:"lastUsedAt,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
 }
 
 type Browser struct {

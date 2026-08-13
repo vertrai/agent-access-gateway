@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/vertrai/agent-access-gateway/resouces/schema"
+	"github.com/vertrai/hub/resouces/schema"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/gmail/v1"
