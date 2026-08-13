@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch a Google access token from Agent Access Gateway."""
+"""Fetch a Google access token from Hub Gateway."""
 
 import argparse
 import json
@@ -10,13 +10,18 @@ import urllib.request
 from pathlib import Path
 
 
-def required_env(name):
-    value = os.environ.get(name, "").strip()
-    if not value:
-        value = hermes_env_value(name)
-    if not value:
-        raise RuntimeError(f"{name} is required")
-    return value
+def configured_value(name):
+    return os.environ.get(name, "").strip() or hermes_env_value(name)
+
+
+def gateway_credentials():
+    current = configured_value("HUB_GATEWAY_URL"), configured_value("HUB_GATEWAY_API_KEY")
+    if all(current):
+        return current
+    legacy = configured_value("AGENT_ACCESS_GATEWAY_URL"), configured_value("AGENT_ACCESS_GATEWAY_API_KEY")
+    if all(legacy):
+        return legacy
+    raise RuntimeError("HUB_GATEWAY_URL and HUB_GATEWAY_API_KEY are required as a complete pair")
 
 
 def hermes_env_value(name):
@@ -38,8 +43,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--token-only", action="store_true")
     args = parser.parse_args()
-    base_url = required_env("AGENT_ACCESS_GATEWAY_URL").rstrip("/")
-    api_key = required_env("AGENT_ACCESS_GATEWAY_API_KEY")
+    base_url, api_key = gateway_credentials()
+    base_url = base_url.rstrip("/")
     request = urllib.request.Request(base_url + "/v1/google-user/access-token")
     request.add_header("Authorization", "Bearer " + api_key)
     try:

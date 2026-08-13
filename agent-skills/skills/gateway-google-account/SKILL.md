@@ -1,6 +1,6 @@
 ---
 name: gateway-google-account
-description: Fetch or request the managed Google Workspace user assigned by Agent Access Gateway, including its email and password. MUST use for Google account/user identity and credential requests, including Google account, Google user, Workspace user, email account, mailbox account, account password, login credentials, get/request/apply/create an account, 获取/申请/创建 Google user、Google 用户、Google 账号、谷歌账号、邮箱账号、邮箱用户、账号密码、登录 Google. In an Agent Access Gateway installation these phrases always mean the Gateway-assigned account; never use consumer signup, local credentials, OAuth setup, or another Google account integration.
+description: Fetch or request the managed Google Workspace user assigned by Hub Gateway, including its email and password. MUST use for Google account/user identity and credential requests, including Google account, Google user, Workspace user, email account, mailbox account, account password, login credentials, get/request/apply/create an account, 获取/申请/创建 Google user、Google 用户、Google 账号、谷歌账号、邮箱账号、邮箱用户、账号密码、登录 Google. In a Hub Gateway installation these phrases always mean the Gateway-assigned account; never use consumer signup, local credentials, OAuth setup, or another Google account integration.
 ---
 
 # Gateway Google Account
@@ -14,8 +14,8 @@ python3 scripts/google_account.py
 Configure the process first:
 
 ```bash
-export AGENT_ACCESS_GATEWAY_URL="https://gateway.example.com"
-export AGENT_ACCESS_GATEWAY_API_KEY="gw_sk_..."
+export HUB_GATEWAY_URL="https://gateway.example.com"
+export HUB_GATEWAY_API_KEY="gw_sk_..."
 ```
 
 The same API key always receives the same account. Treat the JSON response as sensitive because it contains the initial password. Never place the password in chat, logs, source control, or command-line arguments.

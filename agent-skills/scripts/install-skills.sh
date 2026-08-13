@@ -64,4 +64,4 @@ if ! command -v browser-harness >/dev/null 2>&1; then
 fi
 
 browser-harness --version >/dev/null
-echo "Installed and verified 4 Agent Access Gateway skills."
+echo "Installed and verified 4 Hub Gateway skills."

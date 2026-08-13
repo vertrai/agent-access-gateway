@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Persist Agent Access Gateway settings for a supported Agent host."""
+"""Persist Hub Gateway settings for a supported Agent host."""
 
 import argparse
 import getpass
@@ -13,7 +13,12 @@ import re
 from pathlib import Path
 
 
-KEYS = ("AGENT_ACCESS_GATEWAY_URL", "AGENT_ACCESS_GATEWAY_API_KEY")
+KEYS = (
+    "HUB_GATEWAY_URL",
+    "HUB_GATEWAY_API_KEY",
+    "AGENT_ACCESS_GATEWAY_URL",
+    "AGENT_ACCESS_GATEWAY_API_KEY",
+)
 HERMES_CONFLICTING_SKILLS = (
     "agentmail",
     "google-services",
@@ -60,7 +65,7 @@ def update_env_file(path, values):
         if key not in replaced:
             output.append(f"{key}={quoted(values[key])}")
     content = "\n".join(output) + "\n"
-    descriptor, temporary = tempfile.mkstemp(prefix=".agent-access-gateway-", dir=str(path.parent))
+    descriptor, temporary = tempfile.mkstemp(prefix=".hub-gateway-", dir=str(path.parent))
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             handle.write(content)
@@ -76,11 +81,11 @@ def disable_conflicting_hermes_skills():
     try:
         from hermes_cli.config import load_config, save_config
     except ImportError as error:
-        if os.environ.get("AGENT_ACCESS_GATEWAY_HERMES_REEXEC") != "1":
+        if os.environ.get("HUB_GATEWAY_HERMES_REEXEC") != "1":
             hermes_python = find_hermes_python()
             if hermes_python:
                 environment = os.environ.copy()
-                environment["AGENT_ACCESS_GATEWAY_HERMES_REEXEC"] = "1"
+                environment["HUB_GATEWAY_HERMES_REEXEC"] = "1"
                 os.execve(hermes_python, [hermes_python, str(Path(__file__).resolve()), *sys.argv[1:]], environment)
         raise RuntimeError("Hermes configuration API is unavailable") from error
     config = load_config()
@@ -137,7 +142,7 @@ def find_hermes_python():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Configure Agent Access Gateway for an Agent host")
+    parser = argparse.ArgumentParser(description="Configure Hub Gateway for an Agent host")
     parser.add_argument("--agent", choices=("hermes",), required=True)
     parser.add_argument("--gateway-url", required=True)
     parser.add_argument("--env-file", default="", help=argparse.SUPPRESS)
@@ -145,17 +150,24 @@ def main():
     gateway_url = args.gateway_url.strip().rstrip("/")
     if not gateway_url.startswith(("http://", "https://")):
         raise RuntimeError("gateway URL must start with http:// or https://")
-    api_key = os.environ.get("AGENT_ACCESS_GATEWAY_API_KEY_INPUT", "").strip()
-    if not api_key and sys.stdin.isatty():
-        api_key = getpass.getpass("Agent Access Gateway API Key: ").strip()
+    api_key = os.environ.get("HUB_GATEWAY_API_KEY_INPUT", "").strip()
     if not api_key:
-        raise RuntimeError("provide the API key through hidden input or AGENT_ACCESS_GATEWAY_API_KEY_INPUT")
+        api_key = os.environ.get("AGENT_ACCESS_GATEWAY_API_KEY_INPUT", "").strip()
+    if not api_key and sys.stdin.isatty():
+        api_key = getpass.getpass("Hub Gateway API Key: ").strip()
+    if not api_key:
+        raise RuntimeError("provide the API key through hidden input or HUB_GATEWAY_API_KEY_INPUT")
     if not api_key.startswith("gw_sk_"):
         raise RuntimeError("gateway API key must start with gw_sk_")
     path = Path(args.env_file).expanduser() if args.env_file else hermes_env_path()
-    update_env_file(path, {"AGENT_ACCESS_GATEWAY_URL": gateway_url, "AGENT_ACCESS_GATEWAY_API_KEY": api_key})
+    update_env_file(path, {
+        "HUB_GATEWAY_URL": gateway_url,
+        "HUB_GATEWAY_API_KEY": api_key,
+        "AGENT_ACCESS_GATEWAY_URL": gateway_url,
+        "AGENT_ACCESS_GATEWAY_API_KEY": api_key,
+    })
     disable_conflicting_hermes_skills()
-    print(f"Configured Agent Access Gateway in {path}")
+    print(f"Configured Hub Gateway in {path}")
     print("The API key was stored with file mode 0600 and was not printed.")
     print("Disabled conflicting Hermes skills: agentmail, google-services, google-workspace, himalaya")
     print("Send /reload-skills in the current Hermes chat to activate the changes without restarting Hermes.")

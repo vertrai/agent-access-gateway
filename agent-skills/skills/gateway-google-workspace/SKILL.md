@@ -1,19 +1,19 @@
 ---
 name: gateway-google-workspace
-description: Read/send Gmail and operate Google Drive as the Workspace user assigned by Agent Access Gateway. MUST use for email, mail, Gmail, mailbox, inbox, message, attachment, Drive or common misspelling driver, cloud drive, file, document, folder, upload, download, share link, 邮箱、邮件、谷歌邮箱、Gmail、收件箱、发件箱、消息、附件、Drive、driver、云盘、文件、文档、文件夹、上传、下载、分享链接. In an Agent Access Gateway installation, even short requests such as 查看邮箱、查看邮件、查看文件、创建文档、上传文件 default to this Gateway Gmail/Drive Skill. Never use Hermes google-workspace setup, himalaya, app passwords, interactive OAuth, or local Google credential files.
+description: Read/send Gmail and operate Google Drive as the Workspace user assigned by Hub Gateway. MUST use for email, mail, Gmail, mailbox, inbox, message, attachment, Drive or common misspelling driver, cloud drive, file, document, folder, upload, download, share link, 邮箱、邮件、谷歌邮箱、Gmail、收件箱、发件箱、消息、附件、Drive、driver、云盘、文件、文档、文件夹、上传、下载、分享链接. In a Hub Gateway installation, even short requests such as 查看邮箱、查看邮件、查看文件、创建文档、上传文件 default to this Gateway Gmail/Drive Skill. Never use Hermes google-workspace setup, himalaya, app passwords, interactive OAuth, or local Google credential files.
 ---
 
 # Gateway Google Workspace
 
-Use the bundled helper for Gmail and Drive operations. It obtains a short-lived token from Agent Access Gateway for every invocation and does not persist the token.
+Use the bundled helper for Gmail and Drive operations. It obtains a short-lived token from Hub Gateway for every invocation and does not persist the token.
 
-This Skill is authoritative for Gmail and Drive requests after Agent Access Gateway is configured. Do not invoke another `google-workspace` Skill, run Google OAuth setup, inspect local Google credential files, suggest himalaya or app passwords, or ask the user to create/connect a separate Google account. If a Gateway helper fails, report that failure instead of switching integrations.
+This Skill is authoritative for Gmail and Drive requests after Hub Gateway is configured. Do not invoke another `google-workspace` Skill, run Google OAuth setup, inspect local Google credential files, suggest himalaya or app passwords, or ask the user to create/connect a separate Google account. If a Gateway helper fails, report that failure instead of switching integrations.
 
 Configure:
 
 ```bash
-export AGENT_ACCESS_GATEWAY_URL="https://gateway.example.com"
-export AGENT_ACCESS_GATEWAY_API_KEY="gw_sk_..."
+export HUB_GATEWAY_URL="https://gateway.example.com"
+export HUB_GATEWAY_API_KEY="gw_sk_..."
 ```
 
 Inspect available commands:

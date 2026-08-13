@@ -349,7 +349,7 @@ func (g *Resouces) startOrResetBrowser(c *gin.Context, reset bool) {
 			g.internalError(c, idErr)
 			return
 		}
-		row = schema.Browser{ID: id, AccessKeyID: accessKeyID, ProfileName: "access-gateway-" + accessKeyID, ProxyCountryCode: g.config.BrowserProxyCountryCode, TimeoutMinutes: g.config.BrowserTimeoutMinutes, Status: schema.StatusActive}
+		row = schema.Browser{ID: id, AccessKeyID: accessKeyID, ProfileName: "hub-gateway-" + accessKeyID, ProxyCountryCode: g.config.BrowserProxyCountryCode, TimeoutMinutes: g.config.BrowserTimeoutMinutes, Status: schema.StatusActive}
 		if err := g.wdb.Db.Create(&row).Error; err != nil {
 			g.internalError(c, err)
 			return

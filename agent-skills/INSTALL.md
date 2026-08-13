@@ -1,4 +1,4 @@
-# Install Agent Access Gateway Skills
+# Install Hub Gateway Skills
 
 This document is an executable runbook for Codex, Claude Code, Hermes, pi coding agent, and other agents that support `SKILL.md` directories.
 
@@ -46,10 +46,10 @@ Perform every step. Ask the user only when credentials or execution approval are
 
 6. Configure the Gateway connection.
 
-   For Hermes, check `AGENT_ACCESS_GATEWAY_URL` and `AGENT_ACCESS_GATEWAY_API_KEY` in the process environment and the file returned by `hermes config env-path`. If either value is missing, ask the user for both values in the conversation. Warn that an API key entered in chat remains in local Hermes session history. After the user responds, configure Hermes with the repository helper:
+   For Hermes, check `HUB_GATEWAY_URL` and `HUB_GATEWAY_API_KEY` in the process environment and the file returned by `hermes config env-path`. The legacy `AGENT_ACCESS_GATEWAY_URL` and `AGENT_ACCESS_GATEWAY_API_KEY` names remain supported during migration. If neither name is configured, ask the user for both values in the conversation. Warn that an API key entered in chat remains in local Hermes session history. After the user responds, configure Hermes with the repository helper:
 
    ```bash
-   AGENT_ACCESS_GATEWAY_API_KEY_INPUT="<user-api-key>" \
+   HUB_GATEWAY_API_KEY_INPUT="<user-api-key>" \
      python3 <source-directory>/scripts/configure-agent.py \
        --agent hermes \
        --gateway-url "<user-gateway-url>"
@@ -57,12 +57,12 @@ Perform every step. Ask the user only when credentials or execution approval are
 
    Pass the API key only through the temporary process environment. Never include it in progress or final output. The helper updates the existing Hermes `.env` atomically, preserves unrelated settings, and sets file mode `0600`. It disables conflicting email/Google Skills (`agentmail`, `google-services`, `google-workspace`, and `himalaya`) so account, email, Drive/file/document, and token requests route to the installed Gateway Skills. Installed Gateway helpers read this `.env` directly when the current Hermes process has not loaded the new values yet.
 
-   For pi coding agent and other Agents, check whether its process already has both environment variables:
+   For pi coding agent and other Agents, prefer this complete environment-variable pair:
 
-   - `AGENT_ACCESS_GATEWAY_URL`
-   - `AGENT_ACCESS_GATEWAY_API_KEY`
+   - `HUB_GATEWAY_URL`
+   - `HUB_GATEWAY_API_KEY`
 
-   If either is missing, ask the user for it. Treat the API key as a secret. Do not print it, commit it, or write it into a project file. Configure it using the host's secret/environment mechanism.
+   A complete legacy pair, `AGENT_ACCESS_GATEWAY_URL` and `AGENT_ACCESS_GATEWAY_API_KEY`, remains supported during migration. Do not mix variables from the two pairs. If neither pair is complete, ask the user for the Gateway URL and API key. Treat the API key as a secret. Do not print it, commit it, or write it into a project file. Configure it using the host's secret/environment mechanism.
 
    For pi coding agent, the installer uses `${PI_CODING_AGENT_DIR:-~/.pi/agent}/skills`. After installation, send `/reload` in the current pi session to reload skills without restarting it.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the Google account assigned to an Agent Access Gateway API key."""
+"""Fetch the Google account assigned to a Hub Gateway API key."""
 
 import argparse
 import json
@@ -10,13 +10,18 @@ import urllib.request
 from pathlib import Path
 
 
-def required_env(name):
-    value = os.environ.get(name, "").strip()
-    if not value:
-        value = hermes_env_value(name)
-    if not value:
-        raise RuntimeError(f"{name} is required")
-    return value
+def configured_value(name):
+    return os.environ.get(name, "").strip() or hermes_env_value(name)
+
+
+def gateway_credentials():
+    current = configured_value("HUB_GATEWAY_URL"), configured_value("HUB_GATEWAY_API_KEY")
+    if all(current):
+        return current
+    legacy = configured_value("AGENT_ACCESS_GATEWAY_URL"), configured_value("AGENT_ACCESS_GATEWAY_API_KEY")
+    if all(legacy):
+        return legacy
+    raise RuntimeError("HUB_GATEWAY_URL and HUB_GATEWAY_API_KEY are required as a complete pair")
 
 
 def hermes_env_value(name):
@@ -36,8 +41,8 @@ def hermes_env_value(name):
 
 def main():
     argparse.ArgumentParser(description="Fetch the Google account assigned to this Gateway API key").parse_args()
-    base_url = required_env("AGENT_ACCESS_GATEWAY_URL").rstrip("/")
-    api_key = required_env("AGENT_ACCESS_GATEWAY_API_KEY")
+    base_url, api_key = gateway_credentials()
+    base_url = base_url.rstrip("/")
     request = urllib.request.Request(base_url + "/v1/google-user")
     request.add_header("Authorization", "Bearer " + api_key)
     try:

@@ -56,8 +56,8 @@ func (h *HymatrixClient) Start(_ context.Context, in PodStartInput) error {
 	if provider == "" {
 		provider = "custom"
 	}
-	params := []goarSchema.Tag{{Name: "Action", Value: "start"}, {Name: "LLM_BASE_URL", Value: h.config.LLMBaseURL}, {Name: "LLM_MODEL", Value: h.config.LLMModel}, {Name: "LLM_PROVIDER", Value: provider}, {Name: "AGENT_ACCESS_GATEWAY_URL", Value: in.GatewayURL}, {Name: "ACCESS_SERVER_URL", Value: in.GatewayURL}}
-	secrets := []goarSchema.Tag{{Name: "AGENT_ACCESS_GATEWAY_API_KEY", Value: in.GatewayAPIKey}, {Name: "BROWSER_API_KEY", Value: in.GatewayAPIKey}, {Name: "LLM_API_KEY", Value: h.config.LLMAPIKey}}
+	params := []goarSchema.Tag{{Name: "Action", Value: "start"}, {Name: "LLM_BASE_URL", Value: h.config.LLMBaseURL}, {Name: "LLM_MODEL", Value: h.config.LLMModel}, {Name: "LLM_PROVIDER", Value: provider}, {Name: "HUB_GATEWAY_URL", Value: in.GatewayURL}, {Name: "AGENT_ACCESS_GATEWAY_URL", Value: in.GatewayURL}, {Name: "ACCESS_SERVER_URL", Value: in.GatewayURL}}
+	secrets := []goarSchema.Tag{{Name: "HUB_GATEWAY_API_KEY", Value: in.GatewayAPIKey}, {Name: "AGENT_ACCESS_GATEWAY_API_KEY", Value: in.GatewayAPIKey}, {Name: "BROWSER_API_KEY", Value: in.GatewayAPIKey}, {Name: "LLM_API_KEY", Value: h.config.LLMAPIKey}}
 	if in.BotToken != "" {
 		secrets = append(secrets, goarSchema.Tag{Name: "Bot_Token", Value: in.BotToken})
 	}

@@ -1,6 +1,6 @@
 ---
 name: gateway-remote-browser
-description: Acquire and manage the persistent remote browser assigned to the current Agent Access Gateway API key. MUST use for remote browser, browser session, CDP, live browser URL, open/navigate/click/type/screenshot a website remotely, 远程浏览器、浏览器、浏览器会话、打开网页、访问网站、网页操作、点击、输入、截图. Also use with gateway-google-account when Google browser login is requested. Do not substitute a local browser or an older remote-browser integration.
+description: Acquire and manage the persistent remote browser assigned to the current Hub Gateway API key. MUST use for remote browser, browser session, CDP, live browser URL, open/navigate/click/type/screenshot a website remotely, 远程浏览器、浏览器、浏览器会话、打开网页、访问网站、网页操作、点击、输入、截图. Also use with gateway-google-account when Google browser login is requested. Do not substitute a local browser or an older remote-browser integration.
 ---
 
 # Gateway Remote Browser
@@ -14,8 +14,8 @@ browser-harness --version
 Configure the Gateway once:
 
 ```bash
-export AGENT_ACCESS_GATEWAY_URL="https://gateway.example.com"
-export AGENT_ACCESS_GATEWAY_API_KEY="gw_sk_..."
+export HUB_GATEWAY_URL="https://gateway.example.com"
+export HUB_GATEWAY_API_KEY="gw_sk_..."
 ```
 
 Connect before every browser task:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gmail and Drive operations backed by Agent Access Gateway credentials."""
+"""Gmail and Drive operations backed by Hub Gateway credentials."""
 
 import argparse
 import base64
@@ -19,13 +19,18 @@ GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 DRIVE_API = "https://www.googleapis.com/drive/v3"
 
 
-def required_env(name):
-    value = os.environ.get(name, "").strip()
-    if not value:
-        value = hermes_env_value(name)
-    if not value:
-        raise RuntimeError(f"{name} is required")
-    return value
+def configured_value(name):
+    return os.environ.get(name, "").strip() or hermes_env_value(name)
+
+
+def gateway_credentials():
+    current = configured_value("HUB_GATEWAY_URL"), configured_value("HUB_GATEWAY_API_KEY")
+    if all(current):
+        return current
+    legacy = configured_value("AGENT_ACCESS_GATEWAY_URL"), configured_value("AGENT_ACCESS_GATEWAY_API_KEY")
+    if all(legacy):
+        return legacy
+    raise RuntimeError("HUB_GATEWAY_URL and HUB_GATEWAY_API_KEY are required as a complete pair")
 
 
 def hermes_env_value(name):
@@ -44,8 +49,8 @@ def hermes_env_value(name):
 
 
 def gateway_token():
-    base_url = required_env("AGENT_ACCESS_GATEWAY_URL").rstrip("/")
-    api_key = required_env("AGENT_ACCESS_GATEWAY_API_KEY")
+    base_url, api_key = gateway_credentials()
+    base_url = base_url.rstrip("/")
     request = urllib.request.Request(base_url + "/v1/google-user/access-token")
     request.add_header("Authorization", "Bearer " + api_key)
     try:
@@ -237,7 +242,7 @@ def add_mail_fields(parser):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="Operate Gmail and Drive through Agent Access Gateway")
+    parser = argparse.ArgumentParser(description="Operate Gmail and Drive through Hub Gateway")
     commands = parser.add_subparsers(dest="command", required=True)
 
     profile = commands.add_parser("gmail-profile")

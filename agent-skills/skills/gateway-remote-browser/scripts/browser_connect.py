@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Attach browser-harness to an Agent Access Gateway remote Browser."""
+"""Attach browser-harness to a Hub Gateway remote Browser."""
 
 import json
 import os
@@ -12,13 +12,18 @@ import urllib.request
 from pathlib import Path
 
 
-def required_env(name):
-    value = os.environ.get(name, "").strip()
-    if not value:
-        value = hermes_env_value(name)
-    if not value:
-        raise RuntimeError(f"{name} is required")
-    return value
+def configured_value(name):
+    return os.environ.get(name, "").strip() or hermes_env_value(name)
+
+
+def gateway_credentials():
+    current = configured_value("HUB_GATEWAY_URL"), configured_value("HUB_GATEWAY_API_KEY")
+    if all(current):
+        return current
+    legacy = configured_value("AGENT_ACCESS_GATEWAY_URL"), configured_value("AGENT_ACCESS_GATEWAY_API_KEY")
+    if all(legacy):
+        return legacy
+    raise RuntimeError("HUB_GATEWAY_URL and HUB_GATEWAY_API_KEY are required as a complete pair")
 
 
 def hermes_env_value(name):
@@ -37,8 +42,8 @@ def hermes_env_value(name):
 
 
 def gateway_browser(reset=False):
-    base_url = required_env("AGENT_ACCESS_GATEWAY_URL").rstrip("/")
-    api_key = required_env("AGENT_ACCESS_GATEWAY_API_KEY")
+    base_url, api_key = gateway_credentials()
+    base_url = base_url.rstrip("/")
     path = "/v1/browser/reset" if reset else "/v1/browser"
     request = urllib.request.Request(base_url + path, method="POST" if reset else "GET")
     request.add_header("Authorization", "Bearer " + api_key)
@@ -90,7 +95,7 @@ def ensure_harness_runtime():
         if path.is_file() and path.resolve() != current:
             os.execv(str(path), [str(path), str(Path(__file__).resolve()), *sys.argv[1:]])
     raise RuntimeError(
-        "browser-harness runtime was not found; run the Agent Access Gateway skill installer again"
+        "browser-harness runtime was not found; run the Hub Gateway skill installer again"
     )
 
 
