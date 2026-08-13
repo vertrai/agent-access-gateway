@@ -3,10 +3,10 @@ package schema
 import "time"
 
 const (
-	PodStatusSpawned = "spawned"
-	PodStatusRunning = "running"
-	PodStatusStopped = "stopped"
-	PodStatusFailed  = "failed"
+	PodStatusSpawning = "spawning"
+	PodStatusSpawned  = "spawned"
+	PodStatusRunning  = "running"
+	PodStatusFailed   = "failed"
 )
 
 type User struct {

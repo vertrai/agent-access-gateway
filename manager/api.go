@@ -36,8 +36,6 @@ func (m *Manager) router() *gin.Engine {
 	}
 	admin.POST("/hymatrix/pods", m.spawnPod)
 	admin.GET("/hymatrix/pods", m.listPods)
-	admin.POST("/hymatrix/pods/:id/start", m.startPod)
-	admin.POST("/hymatrix/pods/:id/stop", m.stopPod)
 	for _, route := range []struct{ method, path string }{
 		{http.MethodGet, "/google-user"}, {http.MethodGet, "/google-user/access-token"},
 		{http.MethodPost, "/google-user/test/gmail/send"}, {http.MethodPost, "/google-user/test/drive/folders"},
@@ -251,6 +249,14 @@ func (m *Manager) spawnPod(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "userId, runtimeType, accessKeyId, nodeUrl, privateKey, module and scheduler are required"})
 		return
 	}
+	req.LLM.Provider = strings.TrimSpace(req.LLM.Provider)
+	if req.LLM.Provider == "" {
+		req.LLM.Provider = "custom"
+	}
+	if strings.TrimSpace(req.LLM.Model) == "" || strings.TrimSpace(req.LLM.APIKey) == "" || (req.LLM.Provider == "custom" && strings.TrimSpace(req.LLM.BaseURL) == "") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "llm.model and llm.apiKey are required; llm.baseUrl is also required for custom provider"})
+		return
+	}
 	var accessKey schema.AccessKey
 	if err := m.wdb.Db.Where("id = ? AND user_id = ? AND status = ?", req.AccessKeyID, req.UserID, "available").First(&accessKey).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusConflict, gin.H{"error": "access key is unavailable, belongs to another user, or is already assigned"})
@@ -265,25 +271,46 @@ func (m *Manager) spawnPod(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	pid, err := client.Spawn(c.Request.Context(), req.RuntimeType)
-	pod := schema.HymatrixPod{ID: "pod_" + strings.ReplaceAll(uuid.NewString(), "-", ""), UserID: req.UserID, Name: req.Name, RuntimeType: req.RuntimeType, PID: pid, Status: schema.PodStatusSpawned, NodeURL: req.NodeURL, PrivateKey: req.PrivateKey, Module: req.Module, Scheduler: req.Scheduler, LLMAPIKey: req.LLM.APIKey, LLMBaseURL: req.LLM.BaseURL, LLMModel: req.LLM.Model, LLMProvider: req.LLM.Provider, GatewayAPIKey: accessKey.Secret, AccessKeyID: accessKey.ID, BotToken: req.BotToken}
+	podID := "pod_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	pod := schema.HymatrixPod{ID: podID, UserID: req.UserID, Name: req.Name, RuntimeType: req.RuntimeType, PID: "pending_" + podID, Status: schema.PodStatusSpawning, NodeURL: req.NodeURL, PrivateKey: req.PrivateKey, Module: req.Module, Scheduler: req.Scheduler, LLMAPIKey: req.LLM.APIKey, LLMBaseURL: req.LLM.BaseURL, LLMModel: req.LLM.Model, LLMProvider: req.LLM.Provider, GatewayAPIKey: accessKey.Secret, AccessKeyID: accessKey.ID, BotToken: strings.TrimSpace(req.BotToken)}
 	if pod.Name == "" {
 		pod.Name = req.RuntimeType
 	}
-	if err != nil {
-		pod.Status = schema.PodStatusFailed
-		pod.Error = err.Error()
-	}
-	if saveErr := m.wdb.Db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&pod).Error; err != nil {
-			return err
-		}
+	if reserveErr := m.wdb.Db.Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&schema.AccessKey{}).Where("id = ? AND status = ?", accessKey.ID, "available").Updates(map[string]any{"status": "assigned", "assigned_pod_id": pod.ID})
 		if result.Error != nil {
 			return result.Error
 		}
 		if result.RowsAffected != 1 {
 			return fmt.Errorf("access key was assigned concurrently")
+		}
+		return tx.Create(&pod).Error
+	}); reserveErr != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": reserveErr.Error()})
+		return
+	}
+	botToken := pod.BotToken
+	if botToken == "" && req.RuntimeType == "telegramcustomer" {
+		botToken, err = m.resources.telegramBot(c.Request.Context(), accessKey.Secret)
+	}
+	var pid string
+	if err == nil {
+		pid, err = client.Spawn(c.Request.Context(), PodSpawnInput{RuntimeType: req.RuntimeType, GatewayURL: m.config.Resources.BaseURL, GatewayAPIKey: accessKey.Secret, BotToken: botToken})
+	}
+	if err != nil {
+		pod.Status = schema.PodStatusFailed
+		pod.Error = err.Error()
+	} else {
+		pod.PID = pid
+		pod.Status = schema.PodStatusSpawned
+		pod.BotToken = botToken
+	}
+	if saveErr := m.wdb.Db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&pod).Error; err != nil {
+			return err
+		}
+		if err != nil {
+			return tx.Model(&schema.AccessKey{}).Where("id = ? AND assigned_pod_id = ?", accessKey.ID, pod.ID).Updates(map[string]any{"status": "available", "assigned_pod_id": nil}).Error
 		}
 		return nil
 	}); saveErr != nil {
@@ -307,77 +334,4 @@ func (m *Manager) listPods(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"items": pods})
-}
-func (m *Manager) pod(c *gin.Context) (schema.HymatrixPod, error) {
-	var pod schema.HymatrixPod
-	err := m.wdb.Db.First(&pod, "id = ?", c.Param("id")).Error
-	return pod, err
-}
-func (m *Manager) startPod(c *gin.Context) {
-	pod, err := m.pod(c)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(404, gin.H{"error": "pod not found"})
-		return
-	} else if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	bot := pod.BotToken
-	if bot == "" && pod.RuntimeType == "telegramcustomer" {
-		bot, err = m.resources.telegramBot(c.Request.Context(), pod.GatewayAPIKey)
-	}
-	if err == nil {
-		client, clientErr := NewHymatrixClient(podHymatrixConfig(pod))
-		if clientErr != nil {
-			err = clientErr
-		} else {
-			err = client.Start(c.Request.Context(), PodStartInput{PID: pod.PID, GatewayURL: m.config.Resources.BaseURL, GatewayAPIKey: pod.GatewayAPIKey, BotToken: bot})
-		}
-	}
-	if err != nil {
-		pod.Status = schema.PodStatusFailed
-		pod.Error = err.Error()
-	} else {
-		pod.Status = schema.PodStatusRunning
-		pod.Error = ""
-	}
-	_ = m.wdb.Db.Save(&pod).Error
-	if err != nil {
-		c.JSON(502, gin.H{"error": err.Error(), "pod": pod})
-		return
-	}
-	c.JSON(200, gin.H{"pod": pod})
-}
-func (m *Manager) stopPod(c *gin.Context) {
-	pod, err := m.pod(c)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(404, gin.H{"error": "pod not found"})
-		return
-	} else if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	client, clientErr := NewHymatrixClient(podHymatrixConfig(pod))
-	if clientErr != nil {
-		err = clientErr
-	} else {
-		err = client.Stop(c.Request.Context(), pod.PID)
-	}
-	if err != nil {
-		pod.Status = schema.PodStatusFailed
-		pod.Error = err.Error()
-	} else {
-		pod.Status = schema.PodStatusStopped
-		pod.Error = ""
-	}
-	_ = m.wdb.Db.Save(&pod).Error
-	if err != nil {
-		c.JSON(502, gin.H{"error": err.Error(), "pod": pod})
-		return
-	}
-	c.JSON(200, gin.H{"pod": pod})
-}
-
-func podHymatrixConfig(pod schema.HymatrixPod) HymatrixConfig {
-	return HymatrixConfig{NodeURL: pod.NodeURL, PrivateKey: pod.PrivateKey, Module: pod.Module, Scheduler: pod.Scheduler, LLMAPIKey: pod.LLMAPIKey, LLMBaseURL: pod.LLMBaseURL, LLMModel: pod.LLMModel, LLMProvider: pod.LLMProvider}
 }

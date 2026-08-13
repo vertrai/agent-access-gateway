@@ -38,38 +38,50 @@ func NewHymatrixClient(config HymatrixConfig) (*HymatrixClient, error) {
 	return &HymatrixClient{config: config, sdk: sdk.NewFromBundler(config.NodeURL, bundler)}, nil
 }
 
-func (h *HymatrixClient) Spawn(_ context.Context, runtimeType string) (string, error) {
-	if strings.TrimSpace(runtimeType) == "" {
-		return "", fmt.Errorf("runtimeType is required")
+func (h *HymatrixClient) Spawn(_ context.Context, in PodSpawnInput) (string, error) {
+	tags, err := buildPodSpawnTags(h.config, in)
+	if err != nil {
+		return "", err
 	}
-	res, err := h.sdk.SpawnAndWait(h.config.Module, h.config.Scheduler, []goarSchema.Tag{{Name: containerEnvTagPrefix + "RUNTIME_TYPE", Value: runtimeType}})
+	res, err := h.sdk.SpawnAndWait(h.config.Module, h.config.Scheduler, tags)
 	if err != nil {
 		return "", err
 	}
 	return res.Id, nil
 }
-func (h *HymatrixClient) Start(_ context.Context, in PodStartInput) error {
-	if strings.TrimSpace(in.PID) == "" {
-		return fmt.Errorf("hymatrix pid is required")
+
+func buildPodSpawnTags(config HymatrixConfig, in PodSpawnInput) ([]goarSchema.Tag, error) {
+	if strings.TrimSpace(in.RuntimeType) == "" {
+		return nil, fmt.Errorf("runtimeType is required")
 	}
-	provider := strings.TrimSpace(h.config.LLMProvider)
+	if strings.TrimSpace(in.GatewayURL) == "" || strings.TrimSpace(in.GatewayAPIKey) == "" {
+		return nil, fmt.Errorf("gateway URL and API key are required")
+	}
+	provider := strings.TrimSpace(config.LLMProvider)
 	if provider == "" {
 		provider = "custom"
 	}
-	params := []goarSchema.Tag{{Name: "Action", Value: "start"}, {Name: "LLM_BASE_URL", Value: h.config.LLMBaseURL}, {Name: "LLM_MODEL", Value: h.config.LLMModel}, {Name: "LLM_PROVIDER", Value: provider}, {Name: "HUB_GATEWAY_URL", Value: in.GatewayURL}, {Name: "AGENT_ACCESS_GATEWAY_URL", Value: in.GatewayURL}, {Name: "ACCESS_SERVER_URL", Value: in.GatewayURL}}
-	secrets := []goarSchema.Tag{{Name: "HUB_GATEWAY_API_KEY", Value: in.GatewayAPIKey}, {Name: "AGENT_ACCESS_GATEWAY_API_KEY", Value: in.GatewayAPIKey}, {Name: "BROWSER_API_KEY", Value: in.GatewayAPIKey}, {Name: "LLM_API_KEY", Value: h.config.LLMAPIKey}}
+	values := [][2]string{
+		{"RUNTIME_TYPE", in.RuntimeType},
+		{"HERMES_AGENT_LLM_PROVIDER", provider},
+		{"HERMES_AGENT_LLM_MODEL", config.LLMModel},
+		{"HERMES_AGENT_LLM_BASE_URL", config.LLMBaseURL},
+		{"HERMES_AGENT_LLM_API_KEY", config.LLMAPIKey},
+		{"HUB_GATEWAY_URL", in.GatewayURL},
+		{"HUB_GATEWAY_API_KEY", in.GatewayAPIKey},
+		{"AGENT_ACCESS_GATEWAY_URL", in.GatewayURL},
+		{"AGENT_ACCESS_GATEWAY_API_KEY", in.GatewayAPIKey},
+	}
 	if in.BotToken != "" {
-		secrets = append(secrets, goarSchema.Tag{Name: "Bot_Token", Value: in.BotToken})
+		values = append(values, [2]string{"HERMES_AGENT_TELEGRAM_BOT_TOKEN", in.BotToken})
 	}
-	_, err := h.sdk.SendMessageWithEncryptedParamsAndWait(in.PID, "", params, secrets)
-	return err
-}
-func (h *HymatrixClient) Stop(_ context.Context, pid string) error {
-	if strings.TrimSpace(pid) == "" {
-		return fmt.Errorf("hymatrix pid is required")
+	tags := make([]goarSchema.Tag, 0, len(values))
+	for _, value := range values {
+		if value[1] != "" {
+			tags = append(tags, goarSchema.Tag{Name: containerEnvTagPrefix + value[0], Value: value[1]})
+		}
 	}
-	_, err := h.sdk.SendMessageAndWait(pid, "", []goarSchema.Tag{{Name: "Action", Value: "stop"}})
-	return err
+	return tags, nil
 }
 
-type PodStartInput struct{ PID, GatewayURL, GatewayAPIKey, BotToken string }
+type PodSpawnInput struct{ RuntimeType, GatewayURL, GatewayAPIKey, BotToken string }
