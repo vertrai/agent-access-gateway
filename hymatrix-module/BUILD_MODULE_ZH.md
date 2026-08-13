@@ -12,7 +12,10 @@ hymatrix-module/
 ├── module/
 │   ├── profile.toml       # Module 构建配置
 │   └── bin/start-hermes   # build.sh 生成，不提交 Git
-└── scripts/build.sh       # 编译 start-hermes
+├── tools/vmdocker-agent   # 本地平台 Adapter，Git 忽略
+└── scripts/
+    ├── build.sh           # 编译 start-hermes
+    └── build-module.sh    # 生成 Module
 ```
 
 生成过程分为两步：
@@ -98,7 +101,38 @@ file ./hymatrix-module/module/bin/start-hermes
 ELF 64-bit LSB executable, ARM aarch64, statically linked
 ```
 
-## 5. 准备签名私钥
+## 5. 准备 vmdocker-agent
+
+`vmdocker-agent` 是平台 Adapter，VMDocker 构建时会把它注入镜像的
+`/usr/local/bin/vmdocker-agent`。不要把它放进 `module/bin/`；该目录只存放
+`start-hermes` 等业务程序。
+
+本项目约定的本地位置是：
+
+```text
+hymatrix-module/tools/vmdocker-agent
+```
+
+当前开发机可执行：
+
+```sh
+cp /Users/sandyzhou/GolandProjects/vmdockerv2_agent/build/vmdocker-agent \
+  ./hymatrix-module/tools/vmdocker-agent
+chmod 0755 ./hymatrix-module/tools/vmdocker-agent
+```
+
+该文件已被 `.gitignore` 忽略，因为它体积较大、与目标架构相关，并且可从
+`vmdockerv2_agent` 重新构建。
+
+检查其架构：
+
+```sh
+file ./hymatrix-module/tools/vmdocker-agent
+```
+
+它必须是 Linux 可执行文件，并且与 `profile.toml` 基础镜像架构一致。
+
+## 6. 准备签名私钥
 
 通过环境变量传入私钥，避免直接写进命令历史或仓库文件：
 
@@ -108,7 +142,32 @@ export VMDOCKER_PRIVATE_KEY="<your-private-key>"
 
 不要提交私钥、Gateway API Key、LLM API Key 或 Telegram Bot Token。
 
-## 6. 生成 Module
+## 7. 生成 Module
+
+推荐使用包装脚本：
+
+```sh
+export VMDOCKER_PRIVATE_KEY="<your-private-key>"
+./hymatrix-module/scripts/build-module.sh
+```
+
+脚本默认使用：
+
+```text
+VMDocker 工作区：/Users/sandyzhou/GolandProjects/vmdocker-workspace/vmdockerv2
+Agent 二进制：   hymatrix-module/tools/vmdocker-agent
+Profile：        hymatrix-module/module/profile.toml
+```
+
+在其他机器上可以覆盖路径：
+
+```sh
+VMDOCKER_WORKSPACE_DIR=/path/to/vmdocker-workspace/vmdockerv2 \
+VMDOCKER_AGENT_BIN=/path/to/vmdocker-agent \
+./hymatrix-module/scripts/build-module.sh
+```
+
+等价的完整命令是：
 
 执行：
 
@@ -130,7 +189,7 @@ hype vmdocker module build \
 命令成功后会输出 Module ID。把该 ID 填入 Hub 管理后台 Hymatrix 页面中的
 `Module` 字段。
 
-## 7. Spawn 时注入运行配置
+## 8. Spawn 时注入运行配置
 
 Module 本身不保存用户密钥。Hub Manager 会在 Spawn 交易中使用
 `Container-Env-*` Tags 注入：
@@ -157,7 +216,7 @@ HERMES_AGENT_TELEGRAM_BOT_TOKEN（可选）
 
 > 安全提示：`Container-Env-*` Tags 不加密，密钥会对交易处理节点可见。仅在可信 Hymatrix 网络中使用。
 
-## 8. 修改 Skills 后重新生成
+## 9. 修改 Skills 后重新生成
 
 Skills 的唯一源码目录是：
 
@@ -169,12 +228,12 @@ hymatrix-module/start-hermes/skills/
 
 ```sh
 ./hymatrix-module/scripts/build.sh
-hype vmdocker module build ...
+./hymatrix-module/scripts/build-module.sh
 ```
 
 Skills 通过 Go `embed` 编译进 `start-hermes`，只修改源码但不重新编译不会更新已有 Module。
 
-## 9. 常见问题
+## 10. 常见问题
 
 ### Docker 镜像架构无法识别
 

@@ -2,6 +2,10 @@
 
 完整的中文生成步骤请参阅 [Hymatrix Module 生成教程](./BUILD_MODULE_ZH.md)。
 
+本机可把预编译的 `vmdocker-agent` 放在 `tools/vmdocker-agent`。该平台二进制被
+Git 忽略，不会提交或直接放入 `module/bin/`；`scripts/build-module.sh` 会默认
+使用它。
+
 该目录参考 `hermes-x-module` 的启动方式，将 Hub 的四个 Gateway Skills 嵌入
 `start-hermes`。Module 每次启动时会把 Skills 刷新到
 `~/.hermes/skills/`，写入 Hub Gateway 环境变量，然后以前台方式执行
