@@ -132,22 +132,32 @@ file ./hymatrix-module/tools/vmdocker-agent
 
 它必须是 Linux 可执行文件，并且与 `profile.toml` 基础镜像架构一致。
 
-## 6. 准备签名私钥
+## 6. Module 签名私钥
 
-通过环境变量传入私钥，避免直接写进命令历史或仓库文件：
+通常不需要手动准备。`build-module.sh` 在没有设置
+`VMDOCKER_PRIVATE_KEY` 时，会通过 `openssl rand` 从系统加密随机源生成一个
+32 字节的一次性私钥。它仅保留在脚本进程内，不会打印或写入文件。
+
+直接运行即可：
+
+```sh
+./hymatrix-module/scripts/build-module.sh
+```
+
+如果构建和后续管理必须使用固定签名身份，也可以显式传入私钥：
 
 ```sh
 export VMDOCKER_PRIVATE_KEY="<your-private-key>"
 ```
 
-不要提交私钥、Gateway API Key、LLM API Key 或 Telegram Bot Token。
+显式提供的私钥优先于自动生成值。不要提交私钥、Gateway API Key、LLM API
+Key 或 Telegram Bot Token。
 
 ## 7. 生成 Module
 
-推荐使用包装脚本：
+推荐使用包装脚本；默认会自动生成一次性签名私钥：
 
 ```sh
-export VMDOCKER_PRIVATE_KEY="<your-private-key>"
 ./hymatrix-module/scripts/build-module.sh
 ```
 
@@ -185,6 +195,11 @@ hype vmdocker module build \
 - `--profile`：本项目的 Module Profile；
 - `--agent-bin`：与目标运行环境匹配的 `vmdocker-agent`；
 - `--private-key`：签署和发布 Module 的私钥。
+
+`--dir` 指向 `vmdockerv2` checkout，是因为当前 `hype vmdocker module build`
+把它作为 Module 构建引擎：由其中的代码读取 Profile、准备 Docker 构建上下文、
+把 `vmdocker-agent` 注入为镜像 ENTRYPOINT，并构建和发布 Module。它不会被打包
+进最终 Module，也不是容器运行时依赖。
 
 命令成功后会输出 Module ID。把该 ID 填入 Hub 管理后台 Hymatrix 页面中的
 `Module` 字段。

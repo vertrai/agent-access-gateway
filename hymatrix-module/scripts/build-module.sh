@@ -7,8 +7,12 @@ agent_bin=${VMDOCKER_AGENT_BIN:-$project_dir/tools/vmdocker-agent}
 profile="$project_dir/module/profile.toml"
 
 if [[ -z "${VMDOCKER_PRIVATE_KEY:-}" ]]; then
-  echo "VMDOCKER_PRIVATE_KEY is required" >&2
-  exit 1
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "openssl is required to generate an ephemeral module signing key" >&2
+    exit 1
+  fi
+  VMDOCKER_PRIVATE_KEY="0x$(openssl rand -hex 32)"
+  echo "Generated an ephemeral module signing key for this build (not printed or saved)." >&2
 fi
 if [[ ! -d "$workspace_dir" ]]; then
   echo "VMDocker workspace not found: $workspace_dir" >&2

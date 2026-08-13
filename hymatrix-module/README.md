@@ -6,6 +6,9 @@
 Git 忽略，不会提交或直接放入 `module/bin/`；`scripts/build-module.sh` 会默认
 使用它。
 
+未设置 `VMDOCKER_PRIVATE_KEY` 时，构建脚本会从系统加密随机源生成仅供本次
+构建使用的一次性签名私钥，不打印也不保存。
+
 该目录参考 `hermes-x-module` 的启动方式，将 Hub 的四个 Gateway Skills 嵌入
 `start-hermes`。Module 每次启动时会把 Skills 刷新到
 `~/.hermes/skills/`，写入 Hub Gateway 环境变量，然后以前台方式执行
