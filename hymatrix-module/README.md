@@ -6,6 +6,9 @@
 Git 忽略，不会提交或直接放入 `module/bin/`；`scripts/build-module.sh` 会默认
 使用它。
 
+Module 构建所需的 VMDocker checkout 默认位于 `tools/vmdockerv2/`，同样被 Git
+忽略。首次构建时脚本会自动通过 `hype vmdocker get` 准备，不依赖其他项目目录。
+
 未设置 `VMDOCKER_PRIVATE_KEY` 时，构建脚本会从系统加密随机源生成仅供本次
 构建使用的一次性签名私钥，不打印也不保存。
 
@@ -45,7 +48,7 @@ Git 忽略，不会提交或直接放入 `module/bin/`；`scripts/build-module.s
 
 ```sh
 hype vmdocker module build \
-  --dir /path/to/vmdocker-workspace/vmdockerv2 \
+  --dir /path/to/hub/hymatrix-module/tools/vmdockerv2 \
   --profile /path/to/hub/hymatrix-module/module/profile.toml \
   --agent-bin /path/to/vmdocker-agent \
   --private-key "$VMDOCKER_PRIVATE_KEY"

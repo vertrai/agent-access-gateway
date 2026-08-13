@@ -12,7 +12,9 @@ hymatrix-module/
 ├── module/
 │   ├── profile.toml       # Module 构建配置
 │   └── bin/start-hermes   # build.sh 生成，不提交 Git
-├── tools/vmdocker-agent   # 本地平台 Adapter，Git 忽略
+├── tools/
+│   ├── vmdocker-agent     # 本地平台 Adapter，Git 忽略
+│   └── vmdockerv2/        # hype 自动准备的构建引擎，Git 忽略
 └── scripts/
     ├── build.sh           # 编译 start-hermes
     └── build-module.sh    # 生成 Module
@@ -37,11 +39,14 @@ hymatrix-module/
 
 ```text
 Hub 仓库：         /path/to/hub
-VMDocker v2：      /path/to/vmdocker-workspace/vmdockerv2
 vmdocker-agent：   /path/to/vmdocker-agent
 ```
 
-请将示例中的路径换成实际绝对路径。
+VMDocker v2 不需要指向其他项目。首次生成 Module 时，脚本会自动准备在：
+
+```text
+/path/to/hub/hymatrix-module/tools/vmdockerv2
+```
 
 ## 3. 检查 Profile
 
@@ -164,15 +169,24 @@ Key 或 Telegram Bot Token。
 脚本默认使用：
 
 ```text
-VMDocker 工作区：/Users/sandyzhou/GolandProjects/vmdocker-workspace/vmdockerv2
+VMDocker 工作区：hymatrix-module/tools/vmdockerv2
 Agent 二进制：   hymatrix-module/tools/vmdocker-agent
 Profile：        hymatrix-module/module/profile.toml
 ```
 
-在其他机器上可以覆盖路径：
+如果 VMDocker 工作区不存在，脚本会先执行：
 
 ```sh
-VMDOCKER_WORKSPACE_DIR=/path/to/vmdocker-workspace/vmdockerv2 \
+hype vmdocker get --dir ./hymatrix-module/tools/vmdockerv2
+```
+
+`get` 只负责准备构建所需的 checkout。`hype vmdocker init` 会进一步启动本地
+VMDocker 服务并运行 examples 初始化，单纯构建 Module 不需要执行它。
+
+如需复用已有 checkout，也可以覆盖路径：
+
+```sh
+VMDOCKER_WORKSPACE_DIR=/path/to/vmdockerv2 \
 VMDOCKER_AGENT_BIN=/path/to/vmdocker-agent \
 ./hymatrix-module/scripts/build-module.sh
 ```
@@ -183,7 +197,7 @@ VMDOCKER_AGENT_BIN=/path/to/vmdocker-agent \
 
 ```sh
 hype vmdocker module build \
-  --dir /path/to/vmdocker-workspace/vmdockerv2 \
+  --dir /path/to/hub/hymatrix-module/tools/vmdockerv2 \
   --profile /path/to/hub/hymatrix-module/module/profile.toml \
   --agent-bin /path/to/vmdocker-agent \
   --private-key "$VMDOCKER_PRIVATE_KEY"
