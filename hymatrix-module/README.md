@@ -15,6 +15,10 @@
 - `gateway-google-workspace`
 - `gateway-remote-browser`
 
+`start-hermes/skills/` 是这四个 Skills 在仓库中的唯一源码位置。对外的
+`agent-skills/scripts/install-skills.sh` 也从该目录安装，不要在
+`agent-skills/` 下维护副本。
+
 ## 构建启动二进制
 
 ```sh

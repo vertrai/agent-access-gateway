@@ -1,4 +1,0 @@
-interface:
-  display_name: "Agent Resource Hub Google Auth"
-  short_description: "Get a Gateway Google API access token"
-  default_prompt: "Use $gateway-google-auth to obtain a Google API access token."

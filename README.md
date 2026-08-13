@@ -157,7 +157,8 @@ http://<manager-host>:8086/admin/test
 - `cmd/resouces` + `resouces`：内网资源服务。负责 Gateway API Key 鉴权与 Browser、Google、Telegram 资源生命周期，不挂载后台页面。
 - `cmd/manager` + `manager`：管理控制面。负责用户、API Key 创建、Resources 内网代理，以及 Hymatrix Pod 的 spawn/start/stop。
 - `web`：只挂载到 Manager。页面按 Manager 管理功能与 Resources 资源池功能分区，浏览器不会接触 Resources 内部密钥和内网地址。
-- `agent-skills`：Skills、安装脚本和 Agent 可执行安装文档的统一目录。
+- `hymatrix-module/start-hermes/skills`：四个 Gateway Skills 的唯一源码目录，同时供 Module 内嵌和外部安装器使用。
+- `agent-skills`：外部 Agent 的安装、配置脚本和可执行安装文档，不再维护 Skills 副本。
 
 两个服务可以使用同一个 PostgreSQL 数据库。Manager 固定使用 `manager_users`、`manager_hymatrix_pods`；Resources 使用各自的资源表，服务之间不直接查询对方的数据表。
 

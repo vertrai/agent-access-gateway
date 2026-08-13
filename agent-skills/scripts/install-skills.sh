@@ -36,14 +36,33 @@ else
 fi
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-source_dir=$(CDPATH= cd -- "$script_dir/../skills" && pwd)
+repository_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
+source_dir="$repository_root/hymatrix-module/start-hermes/skills"
+if [ ! -d "$source_dir" ]; then
+  echo "Hub Gateway skill source not found: $source_dir" >&2
+  exit 1
+fi
 
 mkdir -p "$target_dir"
 installed=0
 for skill_dir in "$source_dir"/gateway-*; do
   skill_name=$(basename "$skill_dir")
-  mkdir -p "$target_dir/$skill_name"
-  cp -R "$skill_dir/." "$target_dir/$skill_name/"
+  destination="$target_dir/$skill_name"
+  temporary=$(mktemp -d "$target_dir/.${skill_name}.XXXXXX")
+  backup="$target_dir/.${skill_name}.previous"
+  cp -R "$skill_dir/." "$temporary/"
+  test -f "$temporary/SKILL.md"
+  rm -rf "$backup"
+  if [ -e "$destination" ]; then
+    mv "$destination" "$backup"
+  fi
+  if ! mv "$temporary" "$destination"; then
+    if [ -e "$backup" ]; then
+      mv "$backup" "$destination"
+    fi
+    exit 1
+  fi
+  rm -rf "$backup"
   test -f "$target_dir/$skill_name/SKILL.md"
   installed=$((installed + 1))
   echo "Installed $skill_name -> $target_dir/$skill_name"

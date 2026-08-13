@@ -1,4 +1,0 @@
-interface:
-  display_name: "Agent Resource Hub Google Workspace"
-  short_description: "Use Gateway email, Gmail, Drive, files, and documents"
-  default_prompt: "Use $gateway-google-workspace to work with Gmail or Google Drive."

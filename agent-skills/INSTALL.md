@@ -8,17 +8,19 @@ Perform every step. Ask the user only when credentials or execution approval are
 
 1. Identify the host as `codex`, `claude`, `hermes`, or `pi`. For another host, determine its absolute skills directory.
 2. Verify that `git`, `sh`, `python3`, and `uv` are available. If `uv` is missing, install it from the official Astral instructions at <https://docs.astral.sh/uv/getting-started/installation/>. Request execution approval if the host requires it.
-3. Resolve the source directory. If this document was provided from an existing local checkout containing `agent-skills/scripts/install-skills.sh` and `agent-skills/skills/`, use its `agent-skills` directory and skip cloning. Otherwise create a temporary directory and use sparse checkout to download only `agent-skills/`, not the Go server source:
+3. Resolve the repository directory. If this document was provided from an existing local checkout containing `agent-skills/scripts/install-skills.sh` and `hymatrix-module/start-hermes/skills/`, use that checkout and skip cloning. Otherwise create a temporary directory and use sparse checkout to download the installer and canonical Skills without downloading the Go services:
 
    ```bash
    git clone --depth 1 --filter=blob:none --sparse \
      https://github.com/vertrai/hub.git \
      <temporary-directory>/hub
    git -C <temporary-directory>/hub \
-     sparse-checkout set --no-cone '/agent-skills/'
+     sparse-checkout set --no-cone \
+       '/agent-skills/' \
+       '/hymatrix-module/start-hermes/skills/'
    ```
 
-   Set `<source-directory>` to `<temporary-directory>/hub/agent-skills`. Verify its `skills/` and `scripts/install-skills.sh` exist. Do not expand the sparse checkout to download the Go application.
+   Set `<source-directory>` to `<temporary-directory>/hub/agent-skills`. Verify `scripts/install-skills.sh` and the repository-level `hymatrix-module/start-hermes/skills/` directory exist. The latter is the single source of truth shared by the installer and the Hymatrix Module. Do not expand the sparse checkout to download the Go services.
 
 4. Install for the detected host. Replace `<source-directory>` with the local checkout or cloned directory resolved above:
 
