@@ -1,0 +1,12 @@
+[dockerfile]
+FROM = "sandytest456/hermes-agent:linux-full"
+bin = "bin"
+CMD = ["start-hermes"]
+
+[vmdocker]
+public = [
+  "~/.hermes/skills/*",
+  "~/.hermes/state.db*",
+  "~/.harness/browser-harness/*",
+  "~/.local/share/uv/tools/browser-harness/*",
+]

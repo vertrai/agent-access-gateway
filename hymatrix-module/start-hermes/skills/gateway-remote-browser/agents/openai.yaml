@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Resource Hub Remote Browser"
+  short_description: "Open websites in the Gateway remote browser"
+  default_prompt: "Use $gateway-remote-browser to acquire a remote browser session."
