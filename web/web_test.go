@@ -13,7 +13,7 @@ func TestRegisterRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	RegisterRoutes(router)
-	for _, path := range []string{"/admin", "/admin/users", "/admin/google", "/admin/telegram", "/admin/hymatrix", "/admin/test"} {
+	for _, path := range []string{"/admin", "/admin/users", "/admin/google", "/admin/browser", "/admin/telegram", "/admin/hymatrix", "/admin/test"} {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		router.ServeHTTP(recorder, request)
@@ -30,11 +30,11 @@ func TestAdminPagesShareRuntimeHubBrandAndNavigation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	RegisterRoutes(router)
-	for _, path := range []string{"/admin", "/admin/users", "/admin/google", "/admin/telegram", "/admin/hymatrix", "/admin/test"} {
+	for _, path := range []string{"/admin", "/admin/users", "/admin/google", "/admin/browser", "/admin/telegram", "/admin/hymatrix", "/admin/test"} {
 		recorder := httptest.NewRecorder()
 		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
 		body := recorder.Body.String()
-		for _, expected := range []string{"AGENT RUNTIME CONTROL", "Agent Runtime Hub", `href="/admin/test"`} {
+		for _, expected := range []string{"AGENT RUNTIME CONTROL", "Agent Runtime Hub", `href="/admin/browser"`, `href="/admin/test"`} {
 			if !strings.Contains(body, expected) {
 				t.Errorf("GET %s is missing shared navigation content %q", path, expected)
 			}
@@ -47,6 +47,7 @@ func TestAdminPagesAutoLoadWithStoredManagerKey(t *testing.T) {
 		"/admin":          "if(currentManagerAdminKey())load()",
 		"/admin/users":    "if (currentManagerAdminKey()) load();",
 		"/admin/google":   "if(currentManagerAdminKey())load()",
+		"/admin/browser":  "if(currentManagerAdminKey())loadBrowserResources()",
 		"/admin/telegram": "loadTelegramResources()",
 		"/admin/hymatrix": "if (currentManagerAdminKey()) load()",
 	} {
@@ -57,6 +58,29 @@ func TestAdminPagesAutoLoadWithStoredManagerKey(t *testing.T) {
 		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
 		if !strings.Contains(recorder.Body.String(), expected) {
 			t.Errorf("GET %s does not auto-load data with a stored Manager key", path)
+		}
+	}
+}
+
+func TestBrowserResourcePageExplainsOnDemandInventory(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterRoutes(router)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/browser", nil))
+	body := recorder.Body.String()
+	for _, expected := range []string{
+		"Browser 资源池",
+		"按需创建",
+		"已创建 Profile",
+		"活跃会话",
+		"/v1/admin/browser/sessions",
+		"打开 Live View",
+		"closeBrowser",
+		"CDP URL 属于自动化连接凭证，继续保持隐藏",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("browser resource page is missing %q", expected)
 		}
 	}
 }
@@ -83,6 +107,10 @@ func TestUsersPageExplainsExistingAndNewUserIssuance(t *testing.T) {
 		`class="key-result issued-key"`,
 		"仅显示一次",
 		`id="newKey"`,
+		`id="gatewayUrl"`,
+		`id="copyGatewayUrl"`,
+		"window.location.origin",
+		"复制 Gateway URL",
 		"离开或刷新页面后，将无法再次查看完整 Key",
 	} {
 		if !strings.Contains(body, expected) {
@@ -115,7 +143,7 @@ func TestHymatrixPageIncludesLiveTransactionPreview(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/hymatrix", nil))
 	body := recorder.Body.String()
-	for _, expected := range []string{"待发送交易", "Envelope", "Protocol tags", "Container environment", "Hub-Spawn-Timestamp", "Container-Env-HERMES_AGENT_LLM_API_KEY", "显示敏感值", "复制预览", "telegramBotLink", "/v1/admin/telegram/bot-link", "01 · Pod 基础配置", "02 · Node 配置", "http://52.220.233.136:8081", "G0hsaVf5gKq25JoIsEGzPfGIcKNKZofgX3i2gDivQjU", "randomPodName", "advanced-config"} {
+	for _, expected := range []string{"待发送交易", "Envelope", "Protocol tags", "Container environment", "Hub-Spawn-Timestamp", "Container-Env-HERMES_AGENT_LLM_API_KEY", "显示敏感值", "复制预览", "telegramBotLink", "telegramAcquireHint", "当前 API Key 未开通 Telegram 资源", "/v1/admin/telegram/bot-link", "01 · Pod 基础配置", "02 · Node 配置", "http://52.220.233.136:8081", "G0hsaVf5gKq25JoIsEGzPfGIcKNKZofgX3i2gDivQjU", "randomPodName", "advanced-config"} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("Hymatrix page is missing %q", expected)
 		}

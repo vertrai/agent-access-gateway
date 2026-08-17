@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -46,6 +47,27 @@ func TestAdminResourceProxyUsesInternalKey(t *testing.T) {
 	request.Header.Set("Authorization", "Bearer manager-secret")
 	service.router().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"items"`) {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestAdminBrowserCloseProxyForwardsSessionID(t *testing.T) {
+	resources := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/internal/browser/sessions/brw_123/close" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("X-Admin-API-Key") != "internal-secret" {
+			t.Errorf("internal key was not forwarded")
+		}
+		_, _ = io.WriteString(w, `{"closed":true}`)
+	}))
+	defer resources.Close()
+	service, _ := New("test", Config{AdminAPIKey: "manager-secret", Resources: ResourcesConfig{BaseURL: resources.URL, AdminAPIKey: "internal-secret", Timeout: time.Second}}, nil)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/admin/browser/sessions/brw_123/close", nil)
+	request.Header.Set("Authorization", "Bearer manager-secret")
+	service.router().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"closed":true`) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
@@ -127,6 +149,26 @@ func TestResourcesTelegramBotDetailsIncludesUsername(t *testing.T) {
 	}
 	if bot.BotToken != "123456:secret" || bot.Username != "vertr_523854_bot" {
 		t.Fatalf("unexpected Telegram bot: %#v", bot)
+	}
+}
+
+func TestResourcesTelegramBotDetailsPreservesForbiddenStatus(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"error":"telegram resource is not allowed for this api key","resource":"telegram"}`)
+	}))
+	defer server.Close()
+
+	client := NewResourcesClient(ResourcesConfig{BaseURL: server.URL, Timeout: time.Second})
+	_, err := client.telegramBotDetails(t.Context(), "gw_sk_test")
+	var resourcesError *ResourcesHTTPError
+	if !errors.As(err, &resourcesError) {
+		t.Fatalf("error = %v, want *ResourcesHTTPError", err)
+	}
+	if resourcesError.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resourcesError.StatusCode, http.StatusForbidden)
 	}
 }
 

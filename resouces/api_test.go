@@ -108,6 +108,21 @@ func TestTelegramAdminRoutesRequireKey(t *testing.T) {
 	}
 }
 
+func TestBrowserAdminRouteRequiresKey(t *testing.T) {
+	g := New("test", Config{AdminAPIKey: "secret"}, nil)
+	for _, test := range []struct{ method, path string }{
+		{http.MethodGet, "/v1/internal/browser/sessions"},
+		{http.MethodPost, "/v1/internal/browser/sessions/brw_test/close"},
+	} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(test.method, test.path, nil)
+		g.router().ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("%s %s status = %d", test.method, test.path, recorder.Code)
+		}
+	}
+}
+
 func TestUserRoutesRequireGatewayAPIKey(t *testing.T) {
 	g := New("test", Config{}, nil)
 	tests := []struct {

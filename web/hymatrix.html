@@ -509,6 +509,7 @@
           ><a class="active" href="/admin/hymatrix">Hymatrix Pods</a>
           <div class="divider"></div>
           <small>RESOURCES</small><a href="/admin/google">Google 资源池</a
+          ><a href="/admin/browser">Browser 资源池</a
           ><a href="/admin/telegram">Telegram 资源池</a
           ><a href="/admin/test">资源 API 测试</a>
         </nav>
@@ -600,6 +601,7 @@
                           target="_blank"
                           rel="noopener noreferrer"
                         ></a></small
+                      ><small id="telegramAcquireHint" class="bot-link error" hidden></small
                     ></label>
                   </div>
                 </fieldset>
@@ -1117,6 +1119,9 @@
       $("userId").onchange = loadKeys;
       $("acquireBot").onclick = async () => {
         const id = $("accessKeyId").value;
+        const acquireHint = $("telegramAcquireHint");
+        acquireHint.hidden = true;
+        acquireHint.textContent = "";
         if (!id) {
           showStatus($("status"), "请先选择一个未使用的 API Key");
           return;
@@ -1133,7 +1138,13 @@
           renderTxPreview();
           showStatus($("status"), "Telegram Bot 已领取并自动填充", true);
         } catch (e) {
-          showStatus($("status"), e.message);
+          const message =
+            e.status === 403
+              ? "当前 API Key 未开通 Telegram 资源。你可以手动填写 Bot Token，或前往“用户与 API Key”调整该 Key 的资源权限。"
+              : e.message;
+          acquireHint.textContent = message;
+          acquireHint.hidden = false;
+          showStatus($("status"), message);
         } finally {
           setBusy($("acquireBot"), false);
         }

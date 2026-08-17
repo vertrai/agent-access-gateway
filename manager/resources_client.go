@@ -140,13 +140,22 @@ type ResourceTelegramBot struct {
 	Username string `json:"username"`
 }
 
+type ResourcesHTTPError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *ResourcesHTTPError) Error() string {
+	return fmt.Sprintf("resources request failed: HTTP %d: %s", e.StatusCode, e.Body)
+}
+
 func (c *ResourcesClient) telegramBotDetails(ctx context.Context, key string) (ResourceTelegramBot, error) {
 	raw, status, err := c.do(ctx, http.MethodGet, "/v1/telegram-bot", nil, key)
 	if err != nil {
 		return ResourceTelegramBot{}, err
 	}
 	if status/100 != 2 {
-		return ResourceTelegramBot{}, fmt.Errorf("resources telegram bot: HTTP %d: %s", status, raw)
+		return ResourceTelegramBot{}, &ResourcesHTTPError{StatusCode: status, Body: string(raw)}
 	}
 	var result struct {
 		TelegramBot ResourceTelegramBot `json:"telegramBot"`

@@ -9,6 +9,7 @@
 - “发送一封邮件给 user@example.com”
 - “把这个文件上传到 Google Drive 并返回分享链接”
 - “使用远程浏览器打开 example.com”
+- “通过 Telegram Bot 和 Hermes 对话”
 
 ## 安装 Skills
 
@@ -96,6 +97,30 @@ Skills 默认安装到 `~/.pi/agent/skills/`（也支持 `PI_CODING_AGENT_DIR`�
 
 同一个 Gateway API Key 会复用同一个浏览器 Profile，以保留网站登录状态。
 
+### Telegram
+
+Telegram Bot 是 Hermes 的对话入口。管理员为 Gateway API Key 开通 Telegram
+权限并分配 Bot 后，用户可以直接打开对应的 `https://t.me/<bot_username>` 与
+Hermes 私聊。
+
+Hymatrix Pod 的使用流程：
+
+1. 在“用户与密钥”中签发或编辑 Gateway API Key，勾选 `Telegram` 资源权限。
+2. 在“Telegram 资源池”中导入已有 Bot，或连接 Telegram 生产账号后通过
+   BotFather 自动生产 Bot。
+3. 在“Hymatrix Pods”中选择用户和 API Key，点击“从 Resources 领取”。系统会
+   为该 Key 固定分配一个 Bot，并自动填写 Bot Token 和 `t.me` 链接。
+4. 创建 Pod。启动参数会把 Bot Token 注入 Hermes，用户点击页面显示的 Bot
+   链接即可开始对话。
+
+同一个 Gateway API Key 会一直使用同一个 Telegram Bot。Hymatrix Module 中的
+`start-hermes` 会把第一条 Telegram 私聊自动设为 Hermes Home Channel，供定时
+任务结果和跨平台消息投递使用；通常不需要再手动发送 `/sethome`。默认只会自动
+绑定私聊，不会把群聊设为 Home Channel。
+
+如果不希望由 Resources 分配，也可以在创建 Hymatrix Pod 时手动填写已有 Bot
+Token。Bot Token 属于敏感凭据，不要写入日志、聊天消息或提交到 Git。
+
 ## 常见问题
 
 ### Agent 没有调用 Gateway Skills
@@ -111,6 +136,15 @@ Hermes 用户先发送：
 ### 获取 Google 账号失败
 
 账号池为空时，Gateway 会自动创建一个 Workspace 账号并立即分配。首次请求可能因此耗时更长。如果自动创建失败，检查服务端返回的 Google Workspace 错误和创建凭据；不要自行注册或切换其他 Google 账号方案。
+
+### Telegram Bot 领取失败
+
+- 返回 `403`：当前 Gateway API Key 没有开通 Telegram 资源权限。前往“用户与
+  密钥”调整该 Key 的权限，或者在 Hymatrix Pods 页面手动填写 Bot Token。
+- 返回 `503`：Telegram 资源池中没有可分配的 Bot。管理员需要导入或生产新的
+  Bot。
+- Bot 能收到消息但没有 Home Channel：新 Module 会在第一条私聊时自动设置；
+  旧版本可以在 Bot 私聊中发送 `/sethome`。
 
 ### Gateway URL 无法连接
 
@@ -171,6 +205,10 @@ Manager 会把新创建 Gateway API Key 的明文与 Resources Key ID 保存到 
 ### Telegram Bot 资源
 
 Telegram Bot 支持两种入池方式：管理员手动导入已有 Bot，或者授权 Telegram 用户账号后让服务通过 BotFather 自动创建。
+
+推荐从 Manager 后台的 `/admin/telegram` 完成生产账号授权、自动生产、手动导入
+和资源池查看。创建或调整 Gateway API Key 时必须启用 `Telegram` 权限，否则该
+Key 调用领取接口会返回 `403`。
 
 手动导入已有 Bot：
 
