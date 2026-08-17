@@ -118,11 +118,8 @@ func TestBuildPodSpawnTagsRequiresHermesGatewayToken(t *testing.T) {
 	}
 }
 
-func TestBuildPodSpawnTagSetsEncryptsSecretsAndIncludesWeixin(t *testing.T) {
-	plain, secret, err := buildPodSpawnTagSets(HymatrixConfig{LLMAPIKey: "llm-secret"}, PodSpawnInput{
-		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret", HermesGatewayToken: "gateway-token",
-		Weixin: &WeixinCredentials{AccountID: "bot@im.bot", Token: "weixin-secret", BaseURL: "https://ilinkai.weixin.qq.com", UserID: "wx-user"},
-	})
+func TestBuildPodSpawnTagSetsSeparatesSecrets(t *testing.T) {
+	plain, secret, err := buildPodSpawnTagSets(HymatrixConfig{LLMAPIKey: "llm-secret"}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret", HermesGatewayToken: "gateway-token"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,16 +130,7 @@ func TestBuildPodSpawnTagSetsEncryptsSecretsAndIncludesWeixin(t *testing.T) {
 	for _, tag := range secret {
 		secretValues[tag.Name] = tag.Value
 	}
-	if plainValues["Container-Env-WEIXIN_DM_POLICY"] != "allowlist" {
-		t.Fatalf("plain tags = %#v", plainValues)
-	}
-	for name, want := range map[string]string{
-		"Container-Env-WEIXIN_ACCOUNT_ID":    "bot@im.bot",
-		"Container-Env-WEIXIN_TOKEN":         "weixin-secret",
-		"Container-Env-WEIXIN_BASE_URL":      "https://ilinkai.weixin.qq.com",
-		"Container-Env-WEIXIN_ALLOWED_USERS": "wx-user",
-		"Container-Env-HUB_GATEWAY_API_KEY":  "gateway-secret",
-	} {
+	for name, want := range map[string]string{"Container-Env-HERMES_AGENT_LLM_API_KEY": "llm-secret", "Container-Env-HUB_GATEWAY_API_KEY": "gateway-secret", "Container-Env-HERMES_GATEWAY_TOKEN": "gateway-token"} {
 		if secretValues[name] != want {
 			t.Errorf("secret tag %s = %q, want %q", name, secretValues[name], want)
 		}

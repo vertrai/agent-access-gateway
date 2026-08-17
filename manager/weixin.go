@@ -28,7 +28,7 @@ type weixinAttempt struct {
 	ID, UserID, PollSecret, QRContent, ProviderBase string
 	ExpiresAt, CredentialExpiresAt                  time.Time
 	Credentials                                     *WeixinCredentials
-	Polling, Claimed                                bool
+	Polling                                         bool
 }
 
 func (m *Manager) startWeixinOnboarding(c *gin.Context) {
@@ -168,32 +168,38 @@ func (m *Manager) cancelWeixinOnboarding(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func (m *Manager) resolveWeixinCredentials(userID, attemptID string) (*WeixinCredentials, error) {
-	if attemptID == "" {
-		return nil, nil
-	}
+func (m *Manager) getWeixinOnboardingCredentials(c *gin.Context) {
 	m.weixinMu.Lock()
 	defer m.weixinMu.Unlock()
-	attempt, ok := m.weixinAttempts[attemptID]
-	if !ok || attempt.UserID != strings.TrimSpace(userID) || attempt.Credentials == nil || attempt.Claimed || time.Now().UTC().After(attempt.CredentialExpiresAt) {
-		return nil, fmt.Errorf("Weixin binding is missing, expired, or belongs to another user")
-	}
-	attempt.Claimed = true
-	m.weixinAttempts[attemptID] = attempt
-	copy := *attempt.Credentials
-	return &copy, nil
-}
-
-func (m *Manager) releaseWeixinAttempt(id string) {
-	if id == "" {
+	attempt, ok := m.weixinAttempts[c.Param("attempt")]
+	if !ok || attempt.Credentials == nil || time.Now().UTC().After(attempt.CredentialExpiresAt) {
+		c.JSON(http.StatusConflict, gin.H{"error": "Weixin binding is not confirmed or has expired"})
 		return
 	}
-	m.weixinMu.Lock()
-	if attempt, ok := m.weixinAttempts[id]; ok {
-		attempt.Claimed = false
-		m.weixinAttempts[id] = attempt
+	credentials := attempt.Credentials
+	for name, value := range map[string]string{"WEIXIN_ACCOUNT_ID": credentials.AccountID, "WEIXIN_TOKEN": credentials.Token, "WEIXIN_BASE_URL": credentials.BaseURL, "WEIXIN_ALLOWED_USERS": credentials.UserID} {
+		if !safeDotenvValue(value) {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "iLink returned an unsafe value for " + name})
+			return
+		}
 	}
-	m.weixinMu.Unlock()
+	env := map[string]string{
+		"WEIXIN_ACCOUNT_ID":    credentials.AccountID,
+		"WEIXIN_TOKEN":         credentials.Token,
+		"WEIXIN_BASE_URL":      credentials.BaseURL,
+		"WEIXIN_DM_POLICY":     "allowlist",
+		"WEIXIN_ALLOWED_USERS": credentials.UserID,
+	}
+	dotenv := fmt.Sprintf("WEIXIN_ACCOUNT_ID=%s\nWEIXIN_TOKEN=%s\nWEIXIN_BASE_URL=%s\nWEIXIN_DM_POLICY=allowlist\nWEIXIN_ALLOWED_USERS=%s\n", credentials.AccountID, credentials.Token, credentials.BaseURL, credentials.UserID)
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"env": env, "dotenv": dotenv})
+}
+
+func safeDotenvValue(value string) bool {
+	if value == "" || strings.TrimSpace(value) != value {
+		return false
+	}
+	return !strings.ContainsAny(value, "\r\n\x00#\"'")
 }
 
 func (m *Manager) updateWeixinAttempt(attempt weixinAttempt) {

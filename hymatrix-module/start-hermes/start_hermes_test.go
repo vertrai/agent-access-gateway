@@ -84,27 +84,6 @@ func TestWriteHermesGatewayEnvRejectsNewlines(t *testing.T) {
 	}
 }
 
-func TestWriteHermesGatewayEnvIncludesWeixinConfiguration(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("WEIXIN_ACCOUNT_ID", "bot@im.bot")
-	t.Setenv("WEIXIN_TOKEN", "weixin-secret")
-	t.Setenv("WEIXIN_BASE_URL", "https://ilinkai.weixin.qq.com")
-	t.Setenv("WEIXIN_DM_POLICY", "allowlist")
-	t.Setenv("WEIXIN_ALLOWED_USERS", "wx-user")
-	if err := WriteHermesGatewayEnv(home, GatewayConfig{URL: "https://hub.example", APIKey: "gw-key"}); err != nil {
-		t.Fatal(err)
-	}
-	content, err := os.ReadFile(filepath.Join(home, ".hermes", ".env"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, line := range []string{"WEIXIN_ACCOUNT_ID=bot@im.bot", "WEIXIN_TOKEN=weixin-secret", "WEIXIN_BASE_URL=https://ilinkai.weixin.qq.com", "WEIXIN_DM_POLICY=allowlist", "WEIXIN_ALLOWED_USERS=wx-user"} {
-		if !strings.Contains(string(content), line) {
-			t.Errorf(".env missing %q: %s", line, content)
-		}
-	}
-}
-
 func TestConfigureTelegramAutoHomeChannelInstallsPlugin(t *testing.T) {
 	home := t.TempDir()
 	if err := ConfigureTelegramAutoHomeChannel(home, "/usr/bin/true"); err != nil {

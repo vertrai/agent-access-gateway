@@ -114,13 +114,6 @@ func buildPodSpawnTagSets(config HymatrixConfig, in PodSpawnInput) ([]goarSchema
 	if in.BotToken != "" {
 		secretValues = append(secretValues, [2]string{"HERMES_AGENT_TELEGRAM_BOT_TOKEN", in.BotToken})
 	}
-	if in.Weixin != nil {
-		plainValues = append(plainValues, [2]string{"WEIXIN_DM_POLICY", "allowlist"})
-		secretValues = append(secretValues,
-			[2]string{"WEIXIN_ACCOUNT_ID", in.Weixin.AccountID}, [2]string{"WEIXIN_TOKEN", in.Weixin.Token},
-			[2]string{"WEIXIN_BASE_URL", in.Weixin.BaseURL}, [2]string{"WEIXIN_ALLOWED_USERS", in.Weixin.UserID},
-		)
-	}
 	toTags := func(values [][2]string) []goarSchema.Tag {
 		tags := make([]goarSchema.Tag, 0, len(values))
 		for _, value := range values {
@@ -135,7 +128,6 @@ func buildPodSpawnTagSets(config HymatrixConfig, in PodSpawnInput) ([]goarSchema
 
 type PodSpawnInput struct {
 	RuntimeType, GatewayURL, GatewayAPIKey, BotToken, HermesGatewayToken string
-	Weixin                                                               *WeixinCredentials
 }
 
 func fetchHymatrixNodeInfo(ctx context.Context, nodeURL string) (HymatrixNodeInfo, error) {

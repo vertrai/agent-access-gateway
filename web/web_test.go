@@ -13,7 +13,7 @@ func TestRegisterRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	RegisterRoutes(router)
-	for _, path := range []string{"/admin", "/admin/users", "/admin/google", "/admin/browser", "/admin/telegram", "/admin/hymatrix", "/admin/test"} {
+	for _, path := range []string{"/admin", "/admin/users", "/admin/google", "/admin/browser", "/admin/telegram", "/admin/weixin", "/admin/hymatrix", "/admin/test"} {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		router.ServeHTTP(recorder, request)
@@ -30,14 +30,27 @@ func TestAdminPagesShareRuntimeHubBrandAndNavigation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	RegisterRoutes(router)
-	for _, path := range []string{"/admin", "/admin/users", "/admin/google", "/admin/browser", "/admin/telegram", "/admin/hymatrix", "/admin/test"} {
+	for _, path := range []string{"/admin", "/admin/users", "/admin/google", "/admin/browser", "/admin/telegram", "/admin/weixin", "/admin/hymatrix", "/admin/test"} {
 		recorder := httptest.NewRecorder()
 		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
 		body := recorder.Body.String()
-		for _, expected := range []string{"AGENT RUNTIME CONTROL", "Agent Runtime Hub", `href="/admin/browser"`, `href="/admin/test"`} {
+		for _, expected := range []string{"AGENT RUNTIME CONTROL", "Agent Runtime Hub", `href="/admin/browser"`, `href="/admin/weixin"`, `href="/admin/test"`} {
 			if !strings.Contains(body, expected) {
 				t.Errorf("GET %s is missing shared navigation content %q", path, expected)
 			}
+		}
+	}
+}
+
+func TestWeixinPageIsStandaloneLocalHermesTest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterRoutes(router)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/weixin", nil))
+	for _, expected := range []string{"Weixin 扫码测试", "不创建 HyMatrix Pod", "WEIXIN_ACCOUNT_ID", "/v1/admin/weixin/onboarding", "复制 .env"} {
+		if !strings.Contains(recorder.Body.String(), expected) {
+			t.Errorf("Weixin page is missing %q", expected)
 		}
 	}
 }

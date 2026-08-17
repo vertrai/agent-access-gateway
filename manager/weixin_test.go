@@ -51,20 +51,43 @@ func TestAllowedWeixinURLRejectsUntrustedHost(t *testing.T) {
 	}
 }
 
-func TestResolveWeixinCredentialsClaimsAttemptOnce(t *testing.T) {
-	m, err := New("test", Config{}, nil)
+func TestConfirmedWeixinCredentialsReturnHermesEnvironment(t *testing.T) {
+	m, err := New("test", Config{AdminAPIKey: "admin"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.weixinAttempts["attempt"] = weixinAttempt{UserID: "user-a", Credentials: &WeixinCredentials{Token: "secret"}, CredentialExpiresAt: time.Now().Add(time.Hour)}
-	if _, err := m.resolveWeixinCredentials("user-a", "attempt"); err != nil {
+	m.weixinAttempts["attempt"] = weixinAttempt{Credentials: &WeixinCredentials{AccountID: "bot@im.bot", Token: "secret-token", BaseURL: "https://ilinkai.weixin.qq.com", UserID: "wx-user"}, CredentialExpiresAt: time.Now().Add(time.Hour)}
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/weixin/onboarding/attempt/credentials", nil)
+	req.Header.Set("Authorization", "Bearer admin")
+	res := httptest.NewRecorder()
+	m.router().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	for _, expected := range []string{"WEIXIN_ACCOUNT_ID", "bot@im.bot", "WEIXIN_TOKEN", "secret-token", "WEIXIN_DM_POLICY=allowlist", "WEIXIN_ALLOWED_USERS=wx-user"} {
+		if !strings.Contains(res.Body.String(), expected) {
+			t.Errorf("response missing %q: %s", expected, res.Body.String())
+		}
+	}
+	if res.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("Cache-Control=%q", res.Header().Get("Cache-Control"))
+	}
+}
+
+func TestConfirmedWeixinCredentialsRejectDotenvInjection(t *testing.T) {
+	m, err := New("test", Config{AdminAPIKey: "admin"}, nil)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.resolveWeixinCredentials("user-a", "attempt"); err == nil {
-		t.Fatal("expected claimed attempt to reject a second consumer")
+	m.weixinAttempts["attempt"] = weixinAttempt{Credentials: &WeixinCredentials{AccountID: "bot@im.bot", Token: "secret\nINJECTED=yes", BaseURL: "https://ilinkai.weixin.qq.com", UserID: "wx-user"}, CredentialExpiresAt: time.Now().Add(time.Hour)}
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/weixin/onboarding/attempt/credentials", nil)
+	req.Header.Set("Authorization", "Bearer admin")
+	res := httptest.NewRecorder()
+	m.router().ServeHTTP(res, req)
+	if res.Code != http.StatusBadGateway {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
 	}
-	m.releaseWeixinAttempt("attempt")
-	if _, err := m.resolveWeixinCredentials("user-a", "attempt"); err != nil {
-		t.Fatalf("released attempt cannot be retried: %v", err)
+	if strings.Contains(res.Body.String(), "INJECTED=yes") {
+		t.Fatalf("unsafe value leaked: %s", res.Body.String())
 	}
 }
