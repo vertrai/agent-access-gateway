@@ -38,6 +38,11 @@ func WriteHermesGatewayEnv(home string, config GatewayConfig) error {
 		values["TELEGRAM_ALLOW_ALL_USERS"] = "true"
 		values["GATEWAY_ALLOW_ALL_USERS"] = "true"
 	}
+	for _, key := range []string{"WEIXIN_ACCOUNT_ID", "WEIXIN_TOKEN", "WEIXIN_BASE_URL", "WEIXIN_DM_POLICY", "WEIXIN_ALLOWED_USERS"} {
+		if value := env(key); value != "" {
+			values[key] = value
+		}
+	}
 	return writeHermesEnv(home, values)
 }
 

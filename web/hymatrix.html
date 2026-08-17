@@ -585,7 +585,6 @@
                         ><input
                           id="botToken"
                           type="password"
-                          required
                           placeholder="可手动填写，或使用所选 Key 从 Resources 领取"
                         /><button
                           id="acquireBot"
@@ -603,6 +602,13 @@
                         ></a></small
                       ><small id="telegramAcquireHint" class="bot-link error" hidden></small
                     ></label>
+					<label class="wide"
+					  >微信 ClawBot（可选）<span class="inline-control"
+						><button id="connectWeixin" type="button" class="secondary">生成微信二维码</button
+						><button id="cancelWeixin" type="button" class="secondary" hidden>取消绑定</button></span
+					  ><small id="weixinStatus">部署前扫码，凭证将通过 HyMatrix 加密 Tags 注入。</small
+					  ><img id="weixinQR" alt="微信绑定二维码" hidden style="width:280px;max-width:100%;margin-top:12px;border-radius:12px" />
+					</label>
                   </div>
                 </fieldset>
                 <fieldset>
@@ -725,8 +731,8 @@
                   ><button id="copyTx" type="button">复制预览</button>
                 </div>
                 <p class="tx-note">
-                  按 SDK 实际标签顺序预览。时间戳由 Manager / SDK
-                  在发送瞬间生成；Gateway Secret 由所选 Access Key 在后端解析。
+				  预览展示加密前的字段名；敏感值由 Manager 在提交时调用 Hymatrix SDK
+				  加密，实际交易使用 Encrypted- 前缀和密文。
                 </p>
               </div>
             </aside>
@@ -790,10 +796,58 @@
       initAdminKey();
       let revealTxSecrets = false;
       let spawnSubmitting = false;
-      let telegramLinkRequest = 0;
+	      let telegramLinkRequest = 0;
+	      let weixinAttemptId = "";
+	      let weixinConnected = false;
+	      let weixinPollTimer = 0;
       let allPods = [];
       let podPage = 1;
-      const podPageSize = 20;
+	      const podPageSize = 20;
+	      async function cancelWeixinBinding() {
+	        window.clearTimeout(weixinPollTimer);
+	        if (weixinAttemptId) await adminRequest(`/v1/admin/weixin/onboarding/${encodeURIComponent(weixinAttemptId)}`, {method:"DELETE"}).catch(() => {});
+	        weixinAttemptId = "";
+	        weixinConnected = false;
+	        $("weixinQR").hidden = true;
+	        $("cancelWeixin").hidden = true;
+	        $("weixinStatus").textContent = "部署前扫码，凭证将通过 HyMatrix 加密 Tags 注入。";
+	      }
+	      async function pollWeixinBinding(interval) {
+	        if (!weixinAttemptId) return;
+	        try {
+	          const result = await adminRequest(`/v1/admin/weixin/onboarding/${encodeURIComponent(weixinAttemptId)}`);
+	          if (result.state === "connected") {
+	            weixinConnected = true;
+	            $("weixinQR").hidden = true;
+	            $("weixinStatus").textContent = "微信已绑定，将在 Spawn 时注入 Hermes。";
+	            renderTxPreview();
+	            return;
+	          }
+	          if (result.state === "expired") {
+	            await cancelWeixinBinding();
+	            $("weixinStatus").textContent = "二维码已过期，请重新生成。";
+	            return;
+	          }
+	          $("weixinStatus").textContent = result.state === "scanned" ? "已扫码，请在微信中确认…" : "等待微信扫码确认…";
+	        } catch (error) { $("weixinStatus").textContent = `查询失败，正在重试：${error.message}`; }
+	        weixinPollTimer = window.setTimeout(() => pollWeixinBinding(interval), interval * 1000);
+	      }
+	      $("connectWeixin").onclick = async () => {
+	        const userId = $("userId").value.trim();
+	        if (!userId) { showStatus($("status"), "请先选择用户"); return; }
+	        await cancelWeixinBinding();
+	        try {
+	          const result = await adminRequest("/v1/admin/weixin/onboarding", {method:"POST", body:JSON.stringify({userId})});
+	          weixinAttemptId = result.attemptId;
+	          weixinConnected = false;
+	          $("weixinQR").src = result.qrImage;
+	          $("weixinQR").hidden = false;
+	          $("cancelWeixin").hidden = false;
+	          $("weixinStatus").textContent = "等待微信扫码确认…";
+	          pollWeixinBinding(Math.max(2, Number(result.intervalSeconds) || 2));
+	        } catch (error) { showStatus($("status"), error.message); }
+	      };
+	      $("cancelWeixin").onclick = cancelWeixinBinding;
       function showTelegramBotLink(link, username) {
         const container = $("telegramBotLink");
         const anchor = $("telegramBotAnchor");
@@ -920,6 +974,7 @@
         return (
           currentManagerAdminKey() !== "" &&
           requiredIDs.every((id) => $(id).value.trim() !== "") &&
+		  (!weixinAttemptId || weixinConnected) &&
           $("form").checkValidity()
         );
       }
@@ -929,7 +984,6 @@
         name: "Pod 名称",
         runtimeType: "Runtime Type",
         gatewayUrl: "Hub Gateway URL",
-        botToken: "Telegram Bot Token",
         nodeUrl: "Node URL",
         scheduler: "Scheduler",
         module: "Module",
@@ -993,9 +1047,9 @@
         return {
           Target: tx.target,
           Data: tx.data,
-          Tags: tx.tags.map(([name, value, sensitive]) => ({
-            name,
-            value: sensitive && !revealTxSecrets ? masked(value) : value,
+	          Tags: tx.tags.map(([name, value, sensitive]) => ({
+	            name,
+	            value: sensitive && !revealTxSecrets ? masked(value) : value,
           })),
         };
       }
@@ -1116,7 +1170,7 @@
         }
       });
       $("botToken").addEventListener("change", resolveTelegramBotLink);
-      $("userId").onchange = loadKeys;
+	      $("userId").onchange = async () => { await cancelWeixinBinding(); await loadKeys(); };
       $("acquireBot").onclick = async () => {
         const id = $("accessKeyId").value;
         const acquireHint = $("telegramAcquireHint");
@@ -1272,7 +1326,8 @@
               name: $("name").value.trim(),
               runtimeType: $("runtimeType").value.trim(),
               accessKeyId: $("accessKeyId").value,
-              botToken: $("botToken").value.trim(),
+	              botToken: $("botToken").value.trim(),
+	              weixinAttemptId,
               gatewayUrl: $("gatewayUrl").value.trim(),
               hermesGatewayToken: $("hermesGatewayToken").value.trim(),
               nodeUrl: $("nodeUrl").value.trim(),
@@ -1292,7 +1347,12 @@
             true,
           );
           $("hermesGatewayToken").value = randomHex();
-          $("name").value = randomPodName();
+	          $("name").value = randomPodName();
+	          weixinAttemptId = "";
+	          weixinConnected = false;
+	          $("weixinQR").hidden = true;
+	          $("cancelWeixin").hidden = true;
+	          $("weixinStatus").textContent = "微信凭证已随 Pod 部署。";
           renderTxPreview();
           await loadKeys();
           load();

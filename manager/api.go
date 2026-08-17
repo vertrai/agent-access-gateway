@@ -44,6 +44,9 @@ func (m *Manager) router() *gin.Engine {
 	admin.POST("/hymatrix/pods", m.spawnPod)
 	admin.GET("/hymatrix/pods", m.listPods)
 	admin.GET("/hymatrix/node-info", m.hymatrixNodeInfo)
+	admin.POST("/weixin/onboarding", m.startWeixinOnboarding)
+	admin.GET("/weixin/onboarding/:attempt", m.pollWeixinOnboarding)
+	admin.DELETE("/weixin/onboarding/:attempt", m.cancelWeixinOnboarding)
 	for _, route := range []struct{ method, path string }{
 		{http.MethodGet, "/google-user"}, {http.MethodGet, "/google-user/access-token"},
 		{http.MethodPost, "/google-user/test/gmail/send"}, {http.MethodPost, "/google-user/test/drive/folders"},
@@ -276,6 +279,7 @@ func (m *Manager) spawnPod(c *gin.Context) {
 	}
 	var req struct {
 		UserID, Name, RuntimeType, AccessKeyID, BotToken string
+		WeixinAttemptID                                  string `json:"weixinAttemptId"`
 		GatewayURL                                       string `json:"gatewayUrl"`
 		HermesGatewayToken                               string `json:"hermesGatewayToken"`
 		NodeURL, PrivateKey, Module                      string
@@ -348,20 +352,25 @@ func (m *Manager) spawnPod(c *gin.Context) {
 		return
 	}
 	botToken := pod.BotToken
+	weixin, err := m.resolveWeixinCredentials(req.UserID, strings.TrimSpace(req.WeixinAttemptID))
 	if botToken == "" && req.RuntimeType == "telegramcustomer" {
-		botToken, err = m.resources.telegramBot(c.Request.Context(), accessKey.Secret)
+		if err == nil {
+			botToken, err = m.resources.telegramBot(c.Request.Context(), accessKey.Secret)
+		}
 	}
 	var pid string
 	if err == nil {
-		pid, err = client.Spawn(c.Request.Context(), PodSpawnInput{RuntimeType: req.RuntimeType, GatewayURL: req.GatewayURL, GatewayAPIKey: accessKey.Secret, BotToken: botToken, HermesGatewayToken: req.HermesGatewayToken})
+		pid, err = client.Spawn(c.Request.Context(), PodSpawnInput{RuntimeType: req.RuntimeType, GatewayURL: req.GatewayURL, GatewayAPIKey: accessKey.Secret, BotToken: botToken, HermesGatewayToken: req.HermesGatewayToken, Weixin: weixin})
 	}
 	if err != nil {
+		m.releaseWeixinAttempt(strings.TrimSpace(req.WeixinAttemptID))
 		pod.Status = schema.PodStatusFailed
 		pod.Error = err.Error()
 	} else {
 		pod.PID = pid
 		pod.Status = schema.PodStatusSpawned
 		pod.BotToken = botToken
+		m.consumeWeixinAttempt(strings.TrimSpace(req.WeixinAttemptID))
 	}
 	if saveErr := m.wdb.Db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Save(&pod).Error; err != nil {

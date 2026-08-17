@@ -194,7 +194,7 @@ http://<manager-host>:8086/admin/test
 - `hymatrix-module/start-hermes/skills`：四个 Gateway Skills 的唯一源码目录，同时供 Module 内嵌和外部安装器使用。
 - `agent-skills`：外部 Agent 的安装、配置脚本和可执行安装文档，不再维护 Skills 副本。
 
-Hymatrix 的 `Container-Env-*` Spawn Tags 不提供加密。LLM Key、Gateway Key 和 Bot Token 会对交易处理节点可见，因此只能在可信 Hymatrix 网络中使用。
+Manager 会使用 Hymatrix SDK 的 encrypted tags 传递 LLM Key、Gateway Key、Bot Token 等敏感环境变量；普通运行配置仍使用 `Container-Env-*` Spawn Tags。VMM 解密 `Encrypted-Container-Env-*` 后再将其注入容器。
 
 两个服务可以使用同一个 PostgreSQL 数据库。Manager 固定使用 `manager_users`、`manager_hymatrix_pods`；Resources 使用各自的资源表，服务之间不直接查询对方的数据表。
 
