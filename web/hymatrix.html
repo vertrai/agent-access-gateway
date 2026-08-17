@@ -53,6 +53,9 @@
       .channel-options {display:flex;gap:16px;flex-wrap:wrap;padding:12px;border:1px solid var(--line);border-radius:10px;background:#f8fafc}
       .channel-options label {display:flex;align-items:center;gap:8px}
       .channel-options input {width:auto}
+      .weixin-auth-dialog {max-width:460px;text-align:center}
+      .weixin-auth-dialog img {display:block;width:320px;max-width:100%;margin:18px auto;border-radius:14px;background:#fff;padding:10px}
+      .weixin-auth-dialog .actions {justify-content:center;margin-top:14px}
       .bot-link {
         display: flex;
         align-items: center;
@@ -608,7 +611,7 @@
                       ><small id="telegramAcquireHint" class="bot-link error" hidden></small
                     ></label
                     ><label id="weixinBotField" class="wide" hidden
-                      >Weixin Bot<select id="weixinBotId"><option value="">请先选择用户</option></select><small>由用户在 Weixin 授权页面扫码创建；每个 Bot 只能分配给一个 Pod。<a href="/admin/weixin">前往扫码授权</a></small></label>
+                      >Weixin Bot<span class="inline-control"><select id="weixinBotId"><option value="">请先选择用户</option></select><button id="authorizeWeixin" type="button" class="secondary">扫码授权</button></span><small>直接扫码创建并自动选中；每个 Bot 只能分配给一个 Pod。</small></label>
                   </div>
                 </fieldset>
                 <fieldset>
@@ -775,6 +778,13 @@
       </div>
       <div id="podDetailBody" class="pod-detail-body"></div>
     </dialog>
+    <dialog id="weixinAuthDialog" class="pod-dialog weixin-auth-dialog">
+      <div class="pod-dialog-head"><div><span class="eyebrow">WEIXIN · ILINK BOT</span><h2>微信扫码授权</h2></div><button id="closeWeixinAuth" type="button" class="secondary">关闭</button></div>
+      <p>请使用微信扫描二维码，并在微信中确认授权。</p>
+      <img id="weixinAuthQR" alt="微信扫码授权二维码" hidden>
+      <p id="weixinAuthStatus" class="status">正在申请二维码…</p>
+      <div class="actions"><button id="retryWeixinAuth" type="button" class="secondary" hidden>重新申请</button></div>
+    </dialog>
     <script src="/admin/assets/common.js"></script>
     <script>
       function randomHex(bytes = 32) {
@@ -799,6 +809,9 @@
 	      let telegramLinkRequest = 0;
       let accessKeysRequest = 0;
       let weixinBotsRequest = 0;
+      let weixinAuthAttempt = "";
+      let weixinAuthTimer = 0;
+      let weixinAuthGeneration = 0;
       let allPods = [];
       let podPage = 1;
 	      const podPageSize = 20;
@@ -1121,20 +1134,119 @@
         $("weixinBotId").innerHTML = '<option value="">加载中…</option>';
         if (!userId) {
           $("weixinBotId").innerHTML = '<option value="">请先选择用户</option>';
-          return;
+          return false;
         }
         try {
           const result = await adminRequest(`/v1/admin/weixin/bots?userId=${encodeURIComponent(userId)}`);
-          if (requestID !== weixinBotsRequest || $("userId").value !== userId) return;
+          if (requestID !== weixinBotsRequest || $("userId").value !== userId) return false;
           const available = result.items.filter((bot) => bot.status === "available");
           $("weixinBotId").innerHTML = '<option value="">请选择可用 Weixin Bot</option>' + available.map((bot) => `<option value="${esc(bot.id)}" data-account="${esc(bot.accountId)}" data-base-url="${esc(bot.baseUrl)}" data-allowed-user="${esc(bot.allowedUserId)}">${esc(bot.accountId)} · ${esc(bot.authorizedAt)}</option>`).join("");
           $("weixinBotId").disabled = available.length === 0;
           if (!available.length) $("weixinBotId").innerHTML = '<option value="">该用户没有可用 Weixin Bot</option>';
         } catch (error) {
-          if (requestID !== weixinBotsRequest || $("userId").value !== userId) return;
+          if (requestID !== weixinBotsRequest || $("userId").value !== userId) return false;
           $("weixinBotId").innerHTML = `<option value="">${esc(error.message)}</option>`;
+          renderTxPreview();
+          return false;
         }
         renderTxPreview();
+        return true;
+      }
+      async function discardWeixinAuthorization() {
+        clearTimeout(weixinAuthTimer);
+        const attempt = weixinAuthAttempt;
+        weixinAuthAttempt = "";
+        if (attempt) await adminRequest(`/v1/admin/weixin/onboarding/${encodeURIComponent(attempt)}`, {method: "DELETE"}).catch(() => {});
+      }
+      async function startWeixinAuthorization() {
+        const userId = $("userId").value;
+        if (!userId) {
+          showStatus($("status"), "请先选择用户，再进行微信扫码授权");
+          return;
+        }
+        ++weixinAuthGeneration;
+        const generation = weixinAuthGeneration;
+        await discardWeixinAuthorization();
+        $("weixinAuthQR").hidden = true;
+        $("retryWeixinAuth").hidden = true;
+        showStatus($("weixinAuthStatus"), "正在申请二维码…", true);
+        if (!$("weixinAuthDialog").open) $("weixinAuthDialog").showModal();
+        setBusy($("authorizeWeixin"), true, "申请中…");
+        try {
+          const result = await adminRequest("/v1/admin/weixin/onboarding", {method: "POST", body: JSON.stringify({userId})});
+          if (generation !== weixinAuthGeneration || $("userId").value !== userId) {
+            await adminRequest(`/v1/admin/weixin/onboarding/${encodeURIComponent(result.attemptId)}`, {method: "DELETE"}).catch(() => {});
+            return;
+          }
+          weixinAuthAttempt = result.attemptId;
+          $("weixinAuthQR").src = result.qrImage;
+          $("weixinAuthQR").hidden = false;
+          showStatus($("weixinAuthStatus"), "等待扫码确认…", true);
+          pollWeixinAuthorization(generation, userId, Math.max(2, Number(result.intervalSeconds) || 2));
+        } catch (error) {
+          showStatus($("weixinAuthStatus"), error.message);
+          $("retryWeixinAuth").hidden = false;
+        } finally {
+          if (generation === weixinAuthGeneration) setBusy($("authorizeWeixin"), false);
+        }
+      }
+      async function pollWeixinAuthorization(generation, userId, seconds) {
+        if (!weixinAuthAttempt || generation !== weixinAuthGeneration) return;
+        try {
+          const state = await adminRequest(`/v1/admin/weixin/onboarding/${encodeURIComponent(weixinAuthAttempt)}`);
+          if (generation !== weixinAuthGeneration || $("userId").value !== userId) return;
+          if (state.state === "connected") {
+            const attempt = weixinAuthAttempt;
+            weixinAuthAttempt = "";
+            const loaded = await loadWeixinBots();
+            if (generation !== weixinAuthGeneration || $("userId").value !== userId) return;
+            $("weixinBotId").value = state.botId;
+            renderTxPreview();
+            $("weixinAuthQR").hidden = true;
+            if (!loaded || !state.botId || $("weixinBotId").value !== state.botId) {
+              showStatus($("weixinAuthStatus"), "授权已完成，但 Bot 列表加载失败。请关闭弹窗后重新选择。", false);
+              showStatus($("status"), "Weixin Bot 已授权，但未能自动选择");
+              await adminRequest(`/v1/admin/weixin/onboarding/${encodeURIComponent(attempt)}`, {method: "DELETE"}).catch(() => {});
+              return;
+            }
+            showStatus($("weixinAuthStatus"), "授权成功，已自动选择 Weixin Bot。", true);
+            showStatus($("status"), "Weixin Bot 授权成功并已选择", true);
+            await adminRequest(`/v1/admin/weixin/onboarding/${encodeURIComponent(attempt)}`, {method: "DELETE"}).catch(() => {});
+            return;
+          }
+          if (state.state === "expired") {
+            weixinAuthAttempt = "";
+            $("weixinAuthQR").hidden = true;
+            $("retryWeixinAuth").hidden = false;
+            showStatus($("weixinAuthStatus"), "二维码已过期，请重新申请。");
+            return;
+          }
+          showStatus($("weixinAuthStatus"), state.state === "scanned" ? "已扫码，请在微信中确认…" : "等待扫码确认…", true);
+        } catch (error) {
+          if (error.status === 404 || error.status === 410) {
+            weixinAuthAttempt = "";
+            $("weixinAuthQR").hidden = true;
+            $("retryWeixinAuth").hidden = false;
+            showStatus($("weixinAuthStatus"), "二维码已过期，请重新申请。");
+            return;
+          }
+          if (error.status === 409) {
+            await discardWeixinAuthorization();
+            $("weixinAuthQR").hidden = true;
+            $("retryWeixinAuth").hidden = false;
+            showStatus($("weixinAuthStatus"), error.message);
+            return;
+          }
+          showStatus($("weixinAuthStatus"), `查询失败，正在重试：${error.message}`);
+        }
+        if (weixinAuthAttempt && generation === weixinAuthGeneration && $("userId").value === userId)
+          weixinAuthTimer = setTimeout(() => pollWeixinAuthorization(generation, userId, seconds), seconds * 1000);
+      }
+      async function closeWeixinAuthorization() {
+        ++weixinAuthGeneration;
+        await discardWeixinAuthorization();
+        $("weixinAuthDialog").close();
+        setBusy($("authorizeWeixin"), false);
       }
       async function resolveScheduler() {
         const nodeUrl = $("nodeUrl").value.trim();
@@ -1161,7 +1273,11 @@
       $("botToken").addEventListener("change", resolveTelegramBotLink);
       $("enableWeixin").onchange = () => {$("weixinBotField").hidden = !$("enableWeixin").checked;renderTxPreview()};
       $("enableTelegram").onchange = renderTxPreview;
-	      $("userId").onchange = async()=>{await Promise.all([loadKeys(),loadWeixinBots()])};
+	      $("userId").onchange = async()=>{++weixinAuthGeneration;await discardWeixinAuthorization();if($("weixinAuthDialog").open)$("weixinAuthDialog").close();await Promise.all([loadKeys(),loadWeixinBots()])};
+      $("authorizeWeixin").onclick = startWeixinAuthorization;
+      $("retryWeixinAuth").onclick = startWeixinAuthorization;
+      $("closeWeixinAuth").onclick = closeWeixinAuthorization;
+      $("weixinAuthDialog").addEventListener("cancel", (event) => {event.preventDefault();closeWeixinAuthorization()});
       $("acquireBot").onclick = async () => {
         const id = $("accessKeyId").value;
         const acquireHint = $("telegramAcquireHint");

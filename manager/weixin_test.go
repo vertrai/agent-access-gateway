@@ -74,6 +74,71 @@ func TestConfirmedWeixinCredentialsReturnHermesEnvironment(t *testing.T) {
 	}
 }
 
+func TestConnectedWeixinPollReturnsStoredBotIDWithoutToken(t *testing.T) {
+	m, err := New("test", Config{AdminAPIKey: "admin"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.weixinAttempts["attempt"] = weixinAttempt{Credentials: &WeixinCredentials{BotID: "wxb_test", AccountID: "bot@im.bot", Token: "secret-token", BaseURL: "https://ilinkai.weixin.qq.com", UserID: "wx-user"}, CredentialExpiresAt: time.Now().Add(time.Hour)}
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/weixin/onboarding/attempt", nil)
+	req.Header.Set("Authorization", "Bearer admin")
+	res := httptest.NewRecorder()
+	m.router().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), `"botId":"wxb_test"`) {
+		t.Fatalf("stored bot ID missing: %s", res.Body.String())
+	}
+	if strings.Contains(res.Body.String(), "secret-token") {
+		t.Fatalf("Weixin token leaked from poll response: %s", res.Body.String())
+	}
+}
+
+func TestCancelledInFlightWeixinPollCannotConfirmAttempt(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		<-release
+		_, _ = w.Write([]byte(`{"status":"confirmed","ilink_bot_id":"bot@im.bot","bot_token":"secret-token","baseurl":"https://ilinkai.weixin.qq.com","ilink_user_id":"wx-user"}`))
+	}))
+	defer provider.Close()
+	m, err := New("test", Config{AdminAPIKey: "admin"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.weixinClient = provider.Client()
+	m.weixinAttempts["attempt"] = weixinAttempt{ID: "attempt", UserID: "user-a", PollSecret: "poll-secret", ProviderBase: provider.URL, ExpiresAt: time.Now().Add(time.Hour)}
+	pollResponse := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		req := httptest.NewRequest(http.MethodGet, "/v1/admin/weixin/onboarding/attempt", nil)
+		req.Header.Set("Authorization", "Bearer admin")
+		res := httptest.NewRecorder()
+		m.router().ServeHTTP(res, req)
+		pollResponse <- res
+	}()
+	<-started
+	cancelReq := httptest.NewRequest(http.MethodDelete, "/v1/admin/weixin/onboarding/attempt", nil)
+	cancelReq.Header.Set("Authorization", "Bearer admin")
+	cancelRes := httptest.NewRecorder()
+	m.router().ServeHTTP(cancelRes, cancelReq)
+	if cancelRes.Code != http.StatusNoContent {
+		t.Fatalf("cancel status=%d body=%s", cancelRes.Code, cancelRes.Body.String())
+	}
+	close(release)
+	res := <-pollResponse
+	if res.Code != http.StatusGone {
+		t.Fatalf("poll status=%d body=%s", res.Code, res.Body.String())
+	}
+	m.weixinMu.Lock()
+	_, exists := m.weixinAttempts["attempt"]
+	m.weixinMu.Unlock()
+	if exists {
+		t.Fatal("cancelled Weixin attempt was resurrected")
+	}
+}
+
 func TestConfirmedWeixinCredentialsRejectDotenvInjection(t *testing.T) {
 	m, err := New("test", Config{AdminAPIKey: "admin"}, nil)
 	if err != nil {

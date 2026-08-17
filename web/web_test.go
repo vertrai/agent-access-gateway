@@ -192,6 +192,11 @@ func TestHymatrixPageSupportsIndependentTelegramAndWeixinChannels(t *testing.T) 
 		`/v1/admin/weixin/bots?userId=`, `enableTelegram: $("enableTelegram").checked`,
 		`weixinBotId: $("enableWeixin").checked`,
 		"Container-Env-HERMES_AGENT_WEIXIN_TOKEN",
+		`id="authorizeWeixin"`, `id="weixinAuthDialog"`, `id="weixinAuthQR"`,
+		`/v1/admin/weixin/onboarding`, `function pollWeixinAuthorization`,
+		`$("weixinBotId").value = state.botId`,
+		`error.status === 404 || error.status === 410`,
+		`$("weixinBotId").value !== state.botId`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("Hymatrix channel selection is missing %q", expected)

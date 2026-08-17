@@ -122,7 +122,7 @@ func (m *Manager) pollWeixinOnboarding(c *gin.Context) {
 			c.JSON(http.StatusGone, gin.H{"state": "expired"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"state": "connected", "accountId": attempt.Credentials.AccountID, "userId": attempt.Credentials.UserID})
+		c.JSON(http.StatusOK, gin.H{"state": "connected", "botId": attempt.Credentials.BotID, "accountId": attempt.Credentials.AccountID, "userId": attempt.Credentials.UserID})
 		return
 	}
 	if time.Now().UTC().After(attempt.ExpiresAt) {
@@ -171,7 +171,28 @@ func (m *Manager) pollWeixinOnboarding(c *gin.Context) {
 		return
 	}
 	credential.BaseURL = base
-	attempt.Credentials = credential
+	active, storeStatus, storeErr := m.storeConfirmedWeixinAttempt(&attempt, credential)
+	if storeErr != nil {
+		c.JSON(storeStatus, gin.H{"error": storeErr.Error()})
+		return
+	}
+	if !active {
+		c.JSON(http.StatusGone, gin.H{"state": "expired"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"state": "connected", "botId": credential.BotID, "accountId": credential.AccountID, "userId": credential.UserID})
+}
+
+// storeConfirmedWeixinAttempt linearizes cancellation and credential storage:
+// once DELETE has removed the attempt, an in-flight provider poll cannot persist it.
+func (m *Manager) storeConfirmedWeixinAttempt(attempt *weixinAttempt, credential *WeixinCredentials) (bool, int, error) {
+	m.weixinMu.Lock()
+	defer m.weixinMu.Unlock()
+	current, exists := m.weixinAttempts[attempt.ID]
+	if !exists {
+		return false, 0, nil
+	}
+	attempt.Polling = current.Polling
 	if m.wdb != nil {
 		bot := schema.WeixinBot{
 			ID: "wxb_" + strings.ReplaceAll(uuid.NewString(), "-", ""), UserID: attempt.UserID,
@@ -190,23 +211,21 @@ func (m *Manager) pollWeixinOnboarding(c *gin.Context) {
 			}},
 		}).Create(&bot)
 		if result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "store Weixin bot: " + result.Error.Error()})
-			return
+			return true, http.StatusInternalServerError, fmt.Errorf("store Weixin bot: %w", result.Error)
 		}
 		if result.RowsAffected != 1 {
-			c.JSON(http.StatusConflict, gin.H{"error": "this Weixin bot belongs to another user or has already been assigned"})
-			return
+			return true, http.StatusConflict, fmt.Errorf("this Weixin bot belongs to another user or has already been assigned")
 		}
 		var stored schema.WeixinBot
 		if err := m.wdb.Db.Where("account_id = ?", bot.AccountID).First(&stored).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "load stored Weixin bot: " + err.Error()})
-			return
+			return true, http.StatusInternalServerError, fmt.Errorf("load stored Weixin bot: %w", err)
 		}
 		credential.BotID = stored.ID
 	}
+	attempt.Credentials = credential
 	attempt.CredentialExpiresAt = time.Now().UTC().Add(24 * time.Hour)
-	m.updateWeixinAttempt(attempt)
-	c.JSON(http.StatusOK, gin.H{"state": "connected", "accountId": credential.AccountID, "userId": credential.UserID})
+	m.weixinAttempts[attempt.ID] = *attempt
+	return true, 0, nil
 }
 
 func (m *Manager) cancelWeixinOnboarding(c *gin.Context) {
