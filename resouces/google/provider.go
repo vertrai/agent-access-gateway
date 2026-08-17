@@ -25,6 +25,8 @@ type NewGoogleUser struct{ Email, Password, GivenName, FamilyName string }
 
 type workspaceAdminCreator struct{ credentialsFile, adminEmail string }
 
+const agentOrgUnitPath = "/vertr-ai-agent"
+
 func NewWorkspaceAdminCreator(file, adminEmail string) GoogleUserCreator {
 	return &workspaceAdminCreator{file, adminEmail}
 }
@@ -42,11 +44,24 @@ func (c *workspaceAdminCreator) Create(ctx context.Context, u NewGoogleUser) (st
 	if err != nil {
 		return "", err
 	}
-	created, err := srv.Users.Insert(&admin.User{PrimaryEmail: u.Email, Password: u.Password, ChangePasswordAtNextLogin: false, Name: &admin.UserName{GivenName: u.GivenName, FamilyName: u.FamilyName}}).Do()
+	created, err := srv.Users.Insert(newWorkspaceAdminUser(u)).Do()
 	if err != nil {
 		return "", fmt.Errorf("create google user %s: %w", u.Email, err)
 	}
 	return created.Id, nil
+}
+
+func newWorkspaceAdminUser(u NewGoogleUser) *admin.User {
+	return &admin.User{
+		PrimaryEmail:              u.Email,
+		Password:                  u.Password,
+		ChangePasswordAtNextLogin: false,
+		OrgUnitPath:               agentOrgUnitPath,
+		Name: &admin.UserName{
+			GivenName:  u.GivenName,
+			FamilyName: u.FamilyName,
+		},
+	}
 }
 
 type dwdTokenIssuer struct {
