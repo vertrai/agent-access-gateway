@@ -22,6 +22,9 @@ var usersHTML []byte
 //go:embed google.html
 var googleHTML []byte
 
+//go:embed browser.html
+var browserHTML []byte
+
 //go:embed telegram.html
 var telegramHTML []byte
 
@@ -42,6 +45,7 @@ func RegisterRoutes(routes gin.IRoutes) {
 	routes.GET("/admin", adminPage)
 	routes.GET("/admin/users", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", usersHTML) })
 	routes.GET("/admin/google", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", googleHTML) })
+	routes.GET("/admin/browser", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", browserHTML) })
 	routes.GET("/admin/telegram", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", telegramHTML) })
 	routes.GET("/admin/hymatrix", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", hymatrixHTML) })
 	routes.GET("/admin/test", testPage)

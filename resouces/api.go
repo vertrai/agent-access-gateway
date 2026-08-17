@@ -41,6 +41,8 @@ func (g *Resouces) router() *gin.Engine {
 	admin.POST("/google/accounts", g.createGoogleAccount)
 	admin.POST("/google/accounts/batch", g.createGoogleAccountsBatch)
 	admin.GET("/google/accounts", g.listGoogleAccounts)
+	admin.GET("/browser/sessions", g.listBrowserSessions)
+	admin.POST("/browser/sessions/:id/close", g.closeBrowserSessionAdmin)
 	admin.POST("/telegram/bots", g.importTelegramBot)
 	admin.GET("/telegram/bots", g.listTelegramBots)
 	admin.POST("/telegram/bots/create", g.createTelegramBots)
@@ -59,6 +61,67 @@ func (g *Resouces) router() *gin.Engine {
 	user.POST("/browser/close", g.requireResourceScope(resourceScopeBrowser), g.closeBrowser)
 	user.GET("/telegram-bot", g.requireResourceScope(resourceScopeTelegram), g.getTelegramBot)
 	return r
+}
+
+func (g *Resouces) listBrowserSessions(c *gin.Context) {
+	type browserSessionSummary struct {
+		ID                string     `json:"id"`
+		AccessKeyID       string     `json:"accessKeyId"`
+		ProviderBrowserID string     `json:"providerBrowserId,omitempty"`
+		ProviderProfileID string     `json:"providerProfileId,omitempty"`
+		ProfileName       string     `json:"profileName,omitempty"`
+		LiveURL           string     `json:"liveUrl,omitempty"`
+		ProxyCountryCode  string     `json:"proxyCountryCode,omitempty"`
+		TimeoutMinutes    int        `json:"timeoutMinutes,omitempty"`
+		Status            string     `json:"status"`
+		ProviderTimeoutAt *time.Time `json:"timeoutAt,omitempty"`
+		LastUsedAt        *time.Time `json:"lastUsedAt,omitempty"`
+		CreatedAt         time.Time  `json:"createdAt"`
+	}
+	var rows []browserSessionSummary
+	if err := g.wdb.Db.Model(&schema.Browser{}).Order("created_at desc").Find(&rows).Error; err != nil {
+		g.internalError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": rows})
+}
+
+func (g *Resouces) closeBrowserSessionAdmin(c *gin.Context) {
+	var row schema.Browser
+	if err := g.wdb.Db.First(&row, "id = ?", c.Param("id")).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "browser profile not found"})
+		return
+	} else if err != nil {
+		g.internalError(c, err)
+		return
+	}
+
+	unlock := g.lockBrowserAccessKey(row.AccessKeyID)
+	defer unlock()
+	if err := g.wdb.Db.First(&row, "id = ?", row.ID).Error; err != nil {
+		g.internalError(c, err)
+		return
+	}
+	if row.ProviderBrowserID != "" {
+		if err := g.browserProvider.Stop(c.Request.Context(), row.ProviderBrowserID); err != nil && !resourcebrowser.IsBrowserProviderNotFound(err) {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	now := time.Now()
+	if err := g.wdb.Db.Model(&row).Updates(map[string]any{
+		"provider_browser_id": "",
+		"cdp_url":             "",
+		"live_url":            "",
+		"status":              "stopped",
+		"provider_started_at": nil,
+		"provider_timeout_at": nil,
+		"provider_checked_at": now,
+	}).Error; err != nil {
+		g.internalError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"closed": true, "id": row.ID, "status": "stopped"})
 }
 
 func (g *Resouces) listAccessKeys(c *gin.Context) {

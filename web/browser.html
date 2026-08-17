@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Browser 资源池</title>
+    <link rel="stylesheet" href="/admin/assets/common.css" />
+    <style>
+      .browser-head { align-items: end; }
+      .browser-summary { grid-template-columns: repeat(3,minmax(0,1fr)); }
+      .browser-summary .metric { position: relative; overflow: hidden; min-height: 132px; }
+      .browser-summary .metric:after { content:""; position:absolute; right:-18px; bottom:-30px; width:92px; height:92px; border:14px solid #e6f5f8; border-radius:50%; }
+      .browser-summary .metric strong { position:relative; z-index:1; }
+      .inventory-head { align-items:center; margin-bottom:16px; }
+      .model-note { display:flex; gap:12px; align-items:flex-start; margin-bottom:18px; padding:14px 16px; border:1px solid #b9dce4; border-radius:12px; background:#f0fafc; color:#315d69; }
+      .model-note b { flex:0 0 auto; color:#08758c; }
+      .profile { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:#43566f; }
+      .session-id { display:block; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .time-stack { display:grid; gap:3px; min-width:150px; }
+      .time-stack small { color:var(--muted); }
+      .live-link { color:var(--blue); font-weight:700; white-space:nowrap; }
+      @media(max-width:760px){.browser-summary{grid-template-columns:1fr}.browser-summary .metric{min-height:0}.browser-head{align-items:stretch}}
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="side"><div class="brand"><span>AGENT RUNTIME CONTROL</span><b>Agent Runtime Hub</b></div><nav class="nav"><small>MANAGER</small><a href="/admin">管理总览</a><a href="/admin/users">用户与密钥</a><a href="/admin/hymatrix">Hymatrix Pods</a><div class="divider"></div><small>RESOURCES</small><a href="/admin/google">Google 资源池</a><a class="active" href="/admin/browser">Browser 资源池</a><a href="/admin/telegram">Telegram 资源池</a><a href="/admin/test">资源 API 测试</a></nav></aside>
+      <main class="content">
+        <header class="page-head browser-head"><div><div class="eyebrow">Persistent browser inventory</div><h1>Browser 资源池</h1><p>查看 API Key 已创建的持久化 Browser Profile 与当前会话状态。</p></div><label class="admin-key">Manager Admin API Key<input id="adminKey" type="password" placeholder="所有管理页面共用" /></label></header>
+        <div class="model-note"><b>按需创建</b><span>Browser 不需要提前补池。拥有 Browser 权限的 API Key 首次请求时会创建独立 Profile，后续请求复用该 Profile；重置只替换会话，不清除 Profile。</span></div>
+        <section class="grid browser-summary">
+          <article class="card metric"><p>已创建 Profile</p><strong id="total">—</strong><p>每个 API Key 最多一个。</p></article>
+          <article class="card metric"><p>活跃会话</p><strong id="active">—</strong><p>当前可连接的 Browser。</p></article>
+          <article class="card metric"><p>已停止</p><strong id="stopped">—</strong><p>下次请求时自动恢复。</p></article>
+          <article class="card wide"><div class="page-head inventory-head"><div><h2>Browser Profile 与会话</h2><p>Live View 仅供管理员查看；CDP URL 属于自动化连接凭证，继续保持隐藏。</p></div><button id="refresh" class="secondary">刷新资源池</button></div><div id="sessions" class="table-wrap"><div class="empty">尚未加载</div></div></article>
+        </section>
+      </main>
+    </div>
+    <script src="/admin/assets/common.js"></script>
+    <script>
+      function browserTime(value){return value?new Date(value).toLocaleString():"—"}
+      function safeLiveURL(value){try{const url=new URL(value);return ["http:","https:"].includes(url.protocol)?url.href:""}catch{return ""}}
+      async function closeBrowser(id){
+        if(!confirm("关闭当前 Browser 会话？Profile 会保留，下次请求时可自动恢复。"))return;
+        const button=document.querySelector(`[data-close-browser="${CSS.escape(id)}"]`);
+        if(button)setBusy(button,true,"关闭中…");
+        try{await adminRequest(`/v1/admin/browser/sessions/${encodeURIComponent(id)}/close`,{method:"POST"});await loadBrowserResources()}
+        catch(error){alert(error.message);if(button)setBusy(button,false)}
+      }
+      async function loadBrowserResources(){
+        setBusy($("refresh"),true,"刷新中…");
+        try{
+          const data=await adminRequest("/v1/admin/browser/sessions");
+          const items=data.items||[];
+          $("total").textContent=items.length;
+          $("active").textContent=items.filter(x=>x.status==="active").length;
+          $("stopped").textContent=items.filter(x=>x.status==="stopped").length;
+          $("sessions").innerHTML=`<table><thead><tr><th>Profile</th><th>状态</th><th>绑定 Key</th><th>Provider Session</th><th>Live View</th><th>区域 / 超时</th><th>最近使用</th><th>操作</th></tr></thead><tbody>${items.map(x=>{const live=safeLiveURL(x.liveUrl);return `<tr><td><b class="profile">${esc(x.profileName||x.id)}</b><small class="session-id">${esc(x.providerProfileId||"Profile 待创建")}</small></td><td>${pill(x.status)}</td><td class="profile">${esc(x.accessKeyId)}</td><td><span class="profile session-id" title="${esc(x.providerBrowserId||"")}">${esc(x.providerBrowserId||"—")}</span></td><td>${live?`<a class="live-link" href="${esc(live)}" target="_blank" rel="noopener noreferrer">打开 Live View ↗</a>`:"—"}</td><td>${esc((x.proxyCountryCode||"—").toUpperCase())} / ${esc(x.timeoutMinutes||"—")} 分钟</td><td><span class="time-stack">${esc(browserTime(x.lastUsedAt))}<small>到期 ${esc(browserTime(x.timeoutAt))}</small></span></td><td>${x.status!=="stopped"?`<button type="button" class="secondary" data-close-browser="${esc(x.id)}">关闭</button>`:"<small>已关闭</small>"}</td></tr>`}).join("")||'<tr><td colspan="8" class="empty">还没有 Browser Profile。API Key 首次请求 Browser 后会自动出现在这里。</td></tr>'}</tbody></table>`;
+          document.querySelectorAll("[data-close-browser]").forEach(button=>button.onclick=()=>closeBrowser(button.dataset.closeBrowser));
+        }catch(error){
+          $("sessions").innerHTML=`<div class="empty error">${esc(error.message)}</div>`;
+        }finally{setBusy($("refresh"),false)}
+      }
+      $("refresh").onclick=loadBrowserResources;
+      document.addEventListener("manager-admin-key-change",loadBrowserResources);
+      if(currentManagerAdminKey())loadBrowserResources();
+    </script>
+  </body>
+</html>

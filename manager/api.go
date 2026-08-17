@@ -30,8 +30,12 @@ func (m *Manager) router() *gin.Engine {
 	admin.GET("/users/:userId/access-keys/available", m.listAvailableAccessKeys)
 	admin.POST("/access-keys/:id/telegram-bot", m.acquireTelegramBot)
 	admin.POST("/telegram/bot-link", m.resolveTelegramBotLink)
+	admin.POST("/browser/sessions/:id/close", func(c *gin.Context) {
+		m.proxyResource("/v1/internal/browser/sessions/" + url.PathEscape(c.Param("id")) + "/close")(c)
+	})
 	for _, route := range []struct{ method, path string }{
 		{http.MethodPost, "/google/accounts"}, {http.MethodPost, "/google/accounts/batch"}, {http.MethodGet, "/google/accounts"},
+		{http.MethodGet, "/browser/sessions"},
 		{http.MethodPost, "/telegram/bots"}, {http.MethodGet, "/telegram/bots"}, {http.MethodPost, "/telegram/bots/create"},
 		{http.MethodPost, "/telegram/auth/init"}, {http.MethodPost, "/telegram/auth/verify"}, {http.MethodPost, "/telegram/auth/2fa"}, {http.MethodGet, "/telegram/auth/status"}, {http.MethodGet, "/telegram/auth/accounts"},
 	} {
@@ -217,6 +221,14 @@ func (m *Manager) acquireTelegramBot(c *gin.Context) {
 	}
 	bot, err := m.resources.telegramBotDetails(c.Request.Context(), key.Secret)
 	if err != nil {
+		var resourcesError *ResourcesHTTPError
+		if errors.As(err, &resourcesError) && resourcesError.StatusCode == http.StatusForbidden {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":    "当前 API Key 未开通 Telegram 资源，请手动填写 Bot Token 或调整 API Key 权限",
+				"resource": "telegram",
+			})
+			return
+		}
 		c.JSON(502, gin.H{"error": err.Error()})
 		return
 	}
