@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>用户与访问密钥</title>
+    <link rel="stylesheet" href="/admin/assets/common.css" />
+    <style>
+      .key-form {
+        align-items: start;
+      }
+      .key-form > label {
+        align-content: start;
+      }
+      .key-form > label > input {
+        height: 46px;
+      }
+      .field-help {
+        min-height: 18px;
+        color: #607087;
+        font-size: 11px;
+        line-height: 1.45;
+      }
+      .scope-field {
+        border: 0;
+        padding: 0;
+        margin: 2px 0 0;
+      }
+      .scope-field legend {
+        margin-bottom: 9px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #3e4e65;
+      }
+      .scope-options {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 9px;
+      }
+      .scope-option {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 11px 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f8fafc;
+        cursor: pointer;
+      }
+      .scope-option:has(input:checked) {
+        border-color: #78c4d3;
+        background: #eefbfc;
+        color: #075f76;
+      }
+      .scope-option input {
+        width: auto;
+        margin: 0;
+      }
+      .scope-badges {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+      }
+      .scope-badge {
+        padding: 4px 7px;
+        border-radius: 99px;
+        background: #e9f8fb;
+        color: #076d83;
+        font:
+          700 10px/1 ui-monospace,
+          monospace;
+      }
+      .scope-badge.off {
+        background: #f0f3f6;
+        color: #8a96a6;
+      }
+      .issued-key {
+        display: none !important;
+        grid-template-columns: 1fr !important;
+        gap: 0 !important;
+        margin-top: 20px !important;
+        padding: 18px;
+        border: 1px solid #9dd9c0;
+        border-radius: 13px;
+        background: #f2fbf7;
+      }
+      .issued-key.visible {
+        display: grid !important;
+      }
+      .issued-key-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+      .issued-key-title {
+        display: flex;
+        gap: 11px;
+        align-items: center;
+      }
+      .issued-key-check {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        flex: 0 0 34px;
+        border-radius: 50%;
+        background: #16845e;
+        color: #fff;
+        font-weight: 800;
+      }
+      .issued-key-title strong {
+        display: block;
+        color: #185e49;
+        font-size: 15px;
+      }
+      .issued-key-title small {
+        display: block;
+        margin-top: 2px;
+        color: #5c786d;
+      }
+      .one-time-badge {
+        padding: 5px 8px;
+        border-radius: 99px;
+        background: #fff3dd;
+        color: #8b5609;
+        font:
+          750 10px/1 ui-monospace,
+          monospace;
+        white-space: nowrap;
+      }
+      .issued-key-value {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 9px;
+      }
+      .issued-key-value .result {
+        display: block !important;
+        min-width: 0;
+        margin: 0;
+        padding: 13px 14px;
+        background: #fff;
+        border-color: #b9d8ca;
+        white-space: normal;
+        word-break: break-all;
+        font-size: 13px;
+      }
+      .issued-key-value button {
+        white-space: nowrap;
+      }
+      .issued-key-foot {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: center;
+        margin-top: 12px;
+      }
+      .issued-key-foot p {
+        font-size: 12px;
+        color: #527064;
+      }
+      .issued-key-foot button {
+        padding: 7px 10px;
+        font-size: 12px;
+      }
+      .scope-dialog {
+        width: min(480px, calc(100vw - 28px));
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        box-shadow: 0 24px 70px rgba(28, 52, 84, 0.22);
+      }
+      .scope-dialog::backdrop {
+        background: rgba(25, 42, 64, 0.3);
+      }
+      .scope-dialog-inner {
+        padding: 22px;
+      }
+      .scope-dialog .scope-options {
+        margin: 18px 0;
+      }
+      .scope-dialog-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: start;
+      }
+      .scope-dialog-head button {
+        padding: 7px 10px;
+      }
+      @media (max-width: 600px) {
+        .scope-options {
+          grid-template-columns: 1fr;
+        }
+        .issued-key-value {
+          grid-template-columns: 1fr;
+        }
+        .issued-key-value button {
+          width: 100%;
+        }
+        .issued-key-foot {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .scope-dialog {
+          width: calc(100vw - 16px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="side">
+        <div class="brand">
+          <span>AGENT RUNTIME CONTROL</span><b>Agent Runtime Hub</b>
+        </div>
+        <nav class="nav">
+          <small>MANAGER</small><a href="/admin">管理总览</a
+          ><a class="active" href="/admin/users">用户与密钥</a
+          ><a href="/admin/hymatrix">Hymatrix Pods</a>
+          <div class="divider"></div>
+          <small>RESOURCES</small><a href="/admin/google">Google 资源池</a
+          ><a href="/admin/telegram">Telegram 资源池</a
+          ><a href="/admin/test">资源 API 测试</a>
+        </nav>
+      </aside>
+      <main class="content">
+        <header class="page-head">
+          <div>
+            <div class="eyebrow">Identity & access</div>
+            <h1>用户与访问密钥</h1>
+            <p>为新用户建档，或为已有用户签发一把独立的 Gateway API Key。</p>
+          </div>
+          <label class="admin-key"
+            >管理员 API Key<input
+              id="adminKey"
+              type="password"
+              placeholder="用于验证本次管理操作"
+          /></label>
+        </header>
+        <section class="grid">
+          <article class="card">
+            <h2>签发 Gateway API Key</h2>
+            <p style="margin-bottom: 16px">
+              填写已有用户 ID 可追加一把 Key；填写新的用户 ID 会同时创建用户。
+            </p>
+            <form id="form" class="grid key-form">
+              <label
+                >用户 ID<input
+                  id="userId"
+                  required
+                  placeholder="例如 user-123"
+                  aria-describedby="userIdHelp"
+                /><small id="userIdHelp" class="field-help"
+                  >用户的稳定标识，创建后不建议修改。</small
+                ></label
+              ><label
+                >用户显示名称<input
+                  id="name"
+                  placeholder="新用户建议填写，已有用户可留空"
+                /><small class="field-help"
+                  >用于管理页面识别，不影响 API Key 的使用。</small
+                ></label
+              >
+              <fieldset class="scope-field wide">
+                <legend>允许使用的资源</legend>
+                <div class="scope-options">
+                  <label class="scope-option"
+                    ><input id="allowGoogle" type="checkbox" checked /><span
+                      >Google</span
+                    ></label
+                  ><label class="scope-option"
+                    ><input id="allowBrowser" type="checkbox" checked /><span
+                      >Browser</span
+                    ></label
+                  ><label class="scope-option"
+                    ><input id="allowTelegram" type="checkbox" checked /><span
+                      >Telegram</span
+                    ></label
+                  >
+                </div>
+              </fieldset>
+              <div class="wide actions">
+                <button type="submit" id="create">签发并显示 API Key</button
+                ><span id="status" class="status"></span>
+              </div>
+            </form>
+            <div id="keyResult" class="key-result issued-key">
+              <div class="issued-key-head">
+                <div class="issued-key-title">
+                  <span class="issued-key-check" aria-hidden="true">✓</span>
+                  <div>
+                    <strong>API Key 已签发</strong
+                    ><small id="deliveryHint">请复制并交付给对应用户</small>
+                  </div>
+                </div>
+                <span class="one-time-badge">仅显示一次</span>
+              </div>
+              <div class="issued-key-value">
+                <pre id="result" class="result"></pre>
+                <button id="copyKey" type="button">复制 API Key</button>
+              </div>
+              <div class="issued-key-foot">
+                <p>离开或刷新页面后，将无法再次查看完整 Key。</p>
+                <button id="newKey" type="button" class="secondary">
+                  继续签发另一把
+                </button>
+              </div>
+            </div>
+          </article>
+          <article class="card">
+            <h2>权限与交付</h2>
+            <p>
+              完整 API Key
+              仅在签发成功后显示一次。资源权限可在签发后调整；关闭权限会立即阻止对应
+              API，但不会删除已经分配的资源。
+            </p>
+          </article>
+          <article class="card wide">
+            <div class="page-head">
+              <div>
+                <h2>已签发的 API Key</h2>
+                <p>按用户查看每把 Key 的权限、状态，以及当前已经分配的资源。</p>
+              </div>
+              <button id="refresh" class="secondary">刷新列表</button>
+            </div>
+            <div id="users" class="table-wrap">
+              <div class="empty">填写管理员 API Key 后加载记录。</div>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+    <dialog id="scopeDialog" class="scope-dialog">
+      <form id="scopeForm" class="scope-dialog-inner">
+        <div class="scope-dialog-head">
+          <div>
+            <div class="eyebrow">Resource access</div>
+            <h2>调整资源权限</h2>
+            <p id="scopeKeyLabel"></p>
+          </div>
+          <button id="closeScopes" type="button" class="secondary">关闭</button>
+        </div>
+        <div class="scope-options">
+          <label class="scope-option"
+            ><input id="editGoogle" type="checkbox" /><span>Google</span></label
+          ><label class="scope-option"
+            ><input id="editBrowser" type="checkbox" /><span
+              >Browser</span
+            ></label
+          ><label class="scope-option"
+            ><input id="editTelegram" type="checkbox" /><span
+              >Telegram</span
+            ></label
+          >
+        </div>
+        <div class="actions">
+          <button id="saveScopes" type="submit">保存权限</button
+          ><span id="scopeStatus" class="status"></span>
+        </div>
+      </form>
+    </dialog>
+    <script src="/admin/assets/common.js"></script>
+    <script>
+      const requestedUserId =
+        new URLSearchParams(location.search).get("userId") || "";
+      if (requestedUserId) $("userId").value = requestedUserId;
+      let accessKeys = [];
+      let editingAccessKeyId = "";
+      function scopeBadges(k) {
+        return `<div class="scope-badges"><span class="scope-badge ${k.allowGoogle ? "" : "off"}">Google</span><span class="scope-badge ${k.allowBrowser ? "" : "off"}">Browser</span><span class="scope-badge ${k.allowTelegram ? "" : "off"}">Telegram</span></div>`;
+      }
+      async function load() {
+        try {
+          const d = await adminRequest("/v1/admin/users");
+          accessKeys = d.items.flatMap((u) =>
+            (u.accessKeys || []).map((k) => ({
+              ...k,
+              userName: u.name || u.id,
+              userId: u.id,
+            })),
+          );
+          const rows = accessKeys
+            .map(
+              (k) =>
+                `<tr><td><b>${esc(k.userName)}</b><br><small>${esc(k.userId)}</small></td><td>${esc(k.keyPrefix)}</td><td>${pill(k.status)}</td><td>${scopeBadges(k)}</td><td>${esc(k.googleEmail || "未分配")}</td><td>${esc(k.browserId || "未创建")}</td><td>${esc(k.telegramBot || "未分配")}</td><td><button type="button" class="secondary" data-edit-scopes="${esc(k.id)}">调整权限</button></td></tr>`,
+            )
+            .join("");
+          $("users").innerHTML =
+            `<table><thead><tr><th>用户</th><th>API Key 前缀</th><th>Key 状态</th><th>资源权限</th><th>已分配 Google</th><th>Browser 实例</th><th>已分配 Telegram</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="8" class="empty">尚未签发 API Key</td></tr>'}</tbody></table>`;
+        } catch (e) {
+          $("users").innerHTML =
+            `<div class="empty error">${esc(e.message)}</div>`;
+        }
+      }
+      $("refresh").onclick = load;
+      document.addEventListener("manager-admin-key-change", () => {
+        if (currentManagerAdminKey()) load();
+      });
+      if (currentManagerAdminKey()) load();
+      $("form").onsubmit = async (e) => {
+        e.preventDefault();
+        setBusy($("create"), true, "签发中…");
+        $("keyResult").classList.remove("visible");
+        try {
+          const d = await adminRequest("/v1/admin/users", {
+            method: "POST",
+            body: JSON.stringify({
+              userId: $("userId").value.trim(),
+              name: $("name").value.trim(),
+              allowGoogle: $("allowGoogle").checked,
+              allowBrowser: $("allowBrowser").checked,
+              allowTelegram: $("allowTelegram").checked,
+            }),
+          });
+          $("result").textContent = d.gatewayApiKey;
+          $("keyResult").classList.add("visible");
+          $("create").hidden = true;
+          $("status").textContent = "";
+          load();
+        } catch (x) {
+          showStatus($("status"), x.message);
+        } finally {
+          setBusy($("create"), false);
+        }
+      };
+      $("users").onclick = (e) => {
+        const button = e.target.closest("[data-edit-scopes]");
+        if (!button) return;
+        const key = accessKeys.find(
+          (item) => item.id === button.dataset.editScopes,
+        );
+        if (!key) return;
+        editingAccessKeyId = key.id;
+        $("editGoogle").checked = key.allowGoogle;
+        $("editBrowser").checked = key.allowBrowser;
+        $("editTelegram").checked = key.allowTelegram;
+        $("scopeKeyLabel").textContent = `${key.userName} · ${key.keyPrefix}`;
+        $("scopeStatus").textContent = "";
+        $("scopeDialog").showModal();
+      };
+      $("closeScopes").onclick = () => $("scopeDialog").close();
+      $("scopeForm").onsubmit = async (e) => {
+        e.preventDefault();
+        setBusy($("saveScopes"), true, "保存中…");
+        try {
+          await adminRequest(
+            `/v1/admin/access-keys/${encodeURIComponent(editingAccessKeyId)}/scopes`,
+            {
+              method: "PATCH",
+              body: JSON.stringify({
+                allowGoogle: $("editGoogle").checked,
+                allowBrowser: $("editBrowser").checked,
+                allowTelegram: $("editTelegram").checked,
+              }),
+            },
+          );
+          showStatus($("scopeStatus"), "权限已更新", true);
+          await load();
+          setTimeout(() => $("scopeDialog").close(), 500);
+        } catch (error) {
+          showStatus($("scopeStatus"), error.message);
+        } finally {
+          setBusy($("saveScopes"), false);
+        }
+      };
+      $("copyKey").onclick = async () => {
+        const key = $("result").textContent.trim();
+        if (!key) return;
+        try {
+          await navigator.clipboard.writeText(key);
+          const button = $("copyKey"),
+            label = button.textContent;
+          button.textContent = "✓ 已复制";
+          $("deliveryHint").textContent = "已复制到剪贴板，请通过安全渠道交付";
+          setTimeout(() => (button.textContent = label), 1400);
+        } catch (e) {
+          showStatus($("status"), "复制失败，请选中 Key 手动复制");
+        }
+      };
+      $("newKey").onclick = () => {
+        $("keyResult").classList.remove("visible");
+        $("result").textContent = "";
+        $("deliveryHint").textContent = "请复制并交付给对应用户";
+        $("create").hidden = false;
+        $("status").textContent = "";
+        $("userId").focus();
+      };
+    </script>
+  </body>
+</html>

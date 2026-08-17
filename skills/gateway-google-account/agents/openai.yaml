@@ -1,4 +1,0 @@
-interface:
-  display_name: "Access Gateway Google Account"
-  short_description: "Get the Gateway Google account, email, and password"
-  default_prompt: "Use $gateway-google-account to fetch the managed Google account."

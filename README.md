@@ -1,6 +1,6 @@
-# Agent Access Gateway
+# Hub
 
-为 Codex、Claude、Hermes 等 Agent 提供可直接使用的 Google 账号、Gmail、Google Drive 和远程浏览器。
+为 Codex、Claude、Hermes、pi coding agent 等 Agent 提供可直接使用的 Google 账号、Gmail、Google Drive、远程浏览器和 Telegram Bot。
 
 安装 Skills 后，你可以直接对 Agent 说：
 
@@ -12,7 +12,7 @@
 
 ## 安装 Skills
 
-安装前，请向 Agent Access Gateway 管理员获取：
+安装前，请向 Hub 管理员获取：
 
 - Gateway URL
 - Gateway API Key（以 `gw_sk_` 开头）
@@ -20,8 +20,8 @@
 然后把下面这段话完整发送给你的 Agent：
 
 ```text
-请按照这个安装文档安装 Agent Access Gateway Skills：
-https://raw.githubusercontent.com/vertrai/agent-access-gateway/main/INSTALL-SKILLS.md
+请按照这个安装文档安装 Hub Skills：
+https://raw.githubusercontent.com/vertrai/hub/main/agent-skills/INSTALL.md
 
 需要配置时向我询问 Gateway URL 和 API Key。不要在输出中显示 API Key。
 ```
@@ -37,6 +37,16 @@ Agent 会自动完成下载、安装和配置。它询问时，再分别提供 G
 ```
 
 不需要重启 Hermes 服务。热加载完成后即可直接使用。
+
+### pi coding agent 用户
+
+Skills 默认安装到 `~/.pi/agent/skills/`（也支持 `PI_CODING_AGENT_DIR`）。安装完成后，在当前 pi 对话中发送：
+
+```text
+/reload
+```
+
+重新加载完成后即可直接使用，不需要重启 pi。
 
 ## 可以使用的能力
 
@@ -98,9 +108,9 @@ Hermes 用户先发送：
 
 然后重新描述任务，例如“查看 Google 邮箱”或“使用远程浏览器打开网站”。
 
-### 获取 Google 账号返回 503
+### 获取 Google 账号失败
 
-通常表示服务端账号池暂时为空。联系 Gateway 管理员补充账号后，再次执行相同请求即可。不要自行注册或切换其他 Google 账号方案。
+账号池为空时，Gateway 会自动创建一个 Workspace 账号并立即分配。首次请求可能因此耗时更长。如果自动创建失败，检查服务端返回的 Google Workspace 错误和创建凭据；不要自行注册或切换其他 Google 账号方案。
 
 ### Gateway URL 无法连接
 
@@ -116,25 +126,80 @@ http://host.docker.internal:8085
 
 ## 服务端开发
 
-以下内容仅供部署 Agent Access Gateway 服务的管理员和开发者使用；普通 Skills 用户不需要执行。
+以下内容仅供部署 Hub 服务的管理员和开发者使用；普通 Skills 用户不需要执行。
 
-复制示例配置，填写 PostgreSQL、Browser Use 和 Google Workspace 配置：
+分别复制两个服务的示例配置。Resources 填写资源供应商配置；Manager 填写自己的 PostgreSQL、管理员密钥、Resources 内网地址和 Hymatrix 配置：
 
 ```bash
-cp ./cmd/accessgateway/config.example.yaml ./cmd/accessgateway/config.yaml
-go run ./cmd/accessgateway --config ./cmd/accessgateway/config.yaml
+cp ./cmd/resouces/config.example.yaml ./cmd/resouces/config.yaml
+cp ./cmd/manager/config.example.yaml ./cmd/manager/config.yaml
+go run ./cmd/resouces --config ./cmd/resouces/config.yaml
+# 另一个终端
+go run ./cmd/manager --config ./cmd/manager/config.yaml
 ```
 
 后台管理页面：
 
 ```text
-http://<gateway-host>:8085/admin
+http://<manager-host>:8086/admin
 ```
 
 API 测试页面：
 
 ```text
-http://<gateway-host>:8085/admin/test
+http://<manager-host>:8086/admin/test
 ```
 
 请勿提交 `config.yaml`、Google Service Account JSON、Gateway API Key 或其他 credentials。Google 账号创建和 Access Token 授权必须使用两个独立的 Service Account。
+
+### 服务目录
+
+- `cmd/resouces` + `resouces`：内网资源服务。负责 Gateway API Key 鉴权与 Browser、Google、Telegram 资源生命周期，不挂载后台页面。
+- `cmd/manager` + `manager`：管理控制面。负责用户、API Key 创建、Resources 内网代理，以及通过带完整环境变量 Tags 的 Spawn 交易创建 Hymatrix Pod。
+- `web`：只挂载到 Manager。页面按 Manager 管理功能与 Resources 资源池功能分区，浏览器不会接触 Resources 内部密钥和内网地址。
+- `hymatrix-module/start-hermes/skills`：四个 Gateway Skills 的唯一源码目录，同时供 Module 内嵌和外部安装器使用。
+- `agent-skills`：外部 Agent 的安装、配置脚本和可执行安装文档，不再维护 Skills 副本。
+
+Hymatrix 的 `Container-Env-*` Spawn Tags 不提供加密。LLM Key、Gateway Key 和 Bot Token 会对交易处理节点可见，因此只能在可信 Hymatrix 网络中使用。
+
+两个服务可以使用同一个 PostgreSQL 数据库。Manager 固定使用 `manager_users`、`manager_hymatrix_pods`；Resources 使用各自的资源表，服务之间不直接查询对方的数据表。
+
+Hymatrix 的 Node URL、签名私钥、Module、Scheduler 与 LLM 参数由管理员在 `/admin/hymatrix` 创建 Pod 时填写，并按 Pod 保存到 `manager_hymatrix_pods`，不再放在 Manager 的 YAML 配置中。私钥、LLM Key、Gateway Key 和 Bot Token 不会通过列表接口返回。
+
+Manager 会把新创建 Gateway API Key 的明文与 Resources Key ID 保存到 `manager_access_keys`，用于在创建 Pod 时选择。一个 Key 绑定一个 Pod 后即标记为已使用，不能再次选择。旧版本只在 Resources 保存哈希的 Key 无法恢复明文，需要重新创建后才能用于 Pod。Hymatrix 页面内置的 ETH 私钥是公开测试私钥，只能用于测试环境。
+
+### Telegram Bot 资源
+
+Telegram Bot 支持两种入池方式：管理员手动导入已有 Bot，或者授权 Telegram 用户账号后让服务通过 BotFather 自动创建。
+
+手动导入已有 Bot：
+
+```http
+POST /v1/admin/telegram/bots
+Authorization: Bearer <manager-admin-key>
+Content-Type: application/json
+
+{"botToken":"<telegram-bot-token>","username":"example_bot"}
+```
+
+Agent 使用 Gateway API Key 获取固定分配给该 Key 的 Bot；账号池为空时返回 `503`：
+
+```http
+GET /v1/telegram-bot
+Authorization: Bearer <gateway-api-key>
+```
+
+同一个 Gateway API Key 最多绑定一个 Telegram Bot，重复获取会返回同一个 Token。Manager 的管理员列表接口 `GET /v1/admin/telegram/bots` 会代理到 Resources，并只返回脱敏 Token。
+
+自动创建流程需要管理员依次调用：
+
+```text
+POST /v1/admin/telegram/auth/init       # phone、apiId、apiHash，发送验证码
+POST /v1/admin/telegram/auth/verify     # accountId、code
+POST /v1/admin/telegram/auth/2fa        # 仅账号启用 2FA 时调用
+GET  /v1/admin/telegram/auth/status
+GET  /v1/admin/telegram/auth/accounts
+POST /v1/admin/telegram/bots/create     # body: {"count": 1}
+```
+
+授权完成后，服务每分钟检查一次可用 Bot 数量，并通过 BotFather 自动补充到 `telegram.minAvailableBots`。遇到 Telegram `FLOOD_WAIT` 会进入冷却期，期间自动创建接口返回 `429`，而手动导入仍然可用。Telegram MTProto Session 保存在 `telegram.dataDir`，必须使用持久化私有目录，不能提交到 Git。

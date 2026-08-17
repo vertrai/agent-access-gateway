@@ -1,0 +1,67 @@
+.nav-toggle {
+  display: none;
+}
+
+.pill.spawning,
+.pill.spawned {
+  background: #eaf2ff;
+  color: #1769e0;
+}
+
+.pill.running {
+  background: #e7f7ef;
+  color: var(--green);
+}
+
+.pill.failed {
+  background: #feebe9;
+  color: var(--red);
+}
+
+@media (max-width: 850px) {
+  .side {
+    padding: 16px 14px;
+  }
+
+  .brand {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    padding: 0 4px;
+    border-bottom: 0;
+  }
+
+  .brand span,
+  .brand b {
+    grid-column: 1;
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    gap: 7px;
+    min-width: auto;
+    padding: 8px 11px;
+  }
+
+  .nav {
+    display: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 15px;
+    padding-top: 13px;
+    border-top: 1px solid var(--line);
+  }
+
+  .side.menu-open .nav {
+    display: grid;
+  }
+
+  .nav small {
+    grid-column: 1 / -1;
+    padding: 10px 8px 2px;
+    color: #7b899c;
+    font: 750 10px/1 ui-monospace, monospace;
+    letter-spacing: 0.1em;
+  }
+}

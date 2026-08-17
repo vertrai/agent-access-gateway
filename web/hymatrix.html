@@ -1,0 +1,1298 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Hymatrix Pod 管理</title>
+    <link rel="stylesheet" href="/admin/assets/common.css" />
+    <style>
+      .pod-layout {
+        display: block;
+      }
+      .pod-compose {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(460px, 0.9fr);
+        gap: 22px;
+        align-items: start;
+      }
+      .builder-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: start;
+        margin-bottom: 20px;
+      }
+      .pod-builder form {
+        display: grid;
+        gap: 18px;
+      }
+      .pod-builder fieldset {
+        margin: 0;
+        padding: 17px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+      .pod-builder legend {
+        padding: 0 8px;
+        color: var(--cyan);
+        font:
+          750 11px/1 ui-monospace,
+          monospace;
+        letter-spacing: 0.08em;
+      }
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .inline-control {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+      }
+      .bot-link {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 20px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .bot-link a {
+        color: var(--blue);
+        overflow-wrap: anywhere;
+      }
+      .bot-link.error {
+        color: var(--red);
+      }
+      .advanced-config {
+        border: 1px dashed #c7d4e2;
+        border-radius: 10px;
+        background: #f8fafc;
+      }
+      .advanced-config summary {
+        padding: 12px 14px;
+        color: #506177;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 750;
+      }
+      .advanced-config[open] summary {
+        border-bottom: 1px solid #dce4ee;
+      }
+      .advanced-config-body {
+        display: grid;
+        gap: 14px;
+        padding: 14px;
+      }
+      .field-missing input,
+      .field-missing select,
+      .field-missing textarea {
+        border-color: #d99a3e;
+        background: #fffaf2;
+      }
+      .missing-list {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        min-height: 30px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .missing-list strong {
+        color: #8a580f;
+      }
+      .missing-list button {
+        padding: 5px 8px;
+        border-color: #e4bd7d;
+        background: #fff8e9;
+        color: #81500a;
+        font-size: 11px;
+      }
+      .missing-list.complete {
+        color: var(--green);
+        font-weight: 700;
+      }
+      .no-access-key {
+        color: var(--amber);
+      }
+      .transaction-preview {
+        position: sticky;
+        top: 24px;
+        padding: 0;
+        overflow: hidden;
+        background: #ffffff;
+        border-color: #ccd9e7;
+        color: var(--ink);
+        box-shadow: 0 18px 42px rgba(28, 52, 84, 0.12);
+      }
+      .tx-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: 14px;
+        padding: 20px 20px 16px;
+        border-bottom: 1px solid #dce6ef;
+        background: linear-gradient(135deg, #f7fbfe 0%, #edf8fb 100%);
+      }
+      .tx-head .eyebrow {
+        color: var(--cyan);
+      }
+      .tx-head h2 {
+        margin: 5px 0 0;
+        color: var(--ink);
+        font-size: 20px;
+      }
+      .tx-state {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 9px;
+        border: 1px solid #c1ceda;
+        border-radius: 999px;
+        color: #63758a;
+        font:
+          750 10px/1 ui-monospace,
+          monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .tx-state:before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #8998a8;
+      }
+      .tx-state.ready {
+        border-color: #77bda5;
+        color: #137a55;
+        background: #edf9f4;
+      }
+      .tx-state.ready:before {
+        background: #36d3a2;
+        box-shadow: 0 0 0 4px rgba(54, 211, 162, 0.12);
+      }
+      .tx-summary {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        border-bottom: 1px solid #dce6ef;
+      }
+      .tx-summary > div {
+        min-width: 0;
+        padding: 13px 18px;
+      }
+      .tx-summary > div + div {
+        border-left: 1px solid #dce6ef;
+      }
+      .tx-label {
+        display: block;
+        margin-bottom: 5px;
+        color: #728096;
+        font:
+          700 9px/1 ui-monospace,
+          monospace;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .tx-summary code {
+        display: block;
+        color: #283c55;
+        font:
+          600 11px/1.5 ui-monospace,
+          monospace;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .tx-body {
+        max-height: calc(100vh - 330px);
+        min-height: 360px;
+        overflow: auto;
+        padding: 0 0 10px;
+        scrollbar-gutter: stable;
+      }
+      .tx-section {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 11px 18px 8px;
+        background: #f7f9fc;
+        color: #718095;
+        font:
+          750 9px/1 ui-monospace,
+          monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .tx-section:after {
+        content: "";
+        height: 1px;
+        flex: 1;
+        background: #d8e2ec;
+      }
+      .tx-row {
+        display: grid;
+        gap: 5px;
+        padding: 9px 18px 10px;
+        border-left: 2px solid transparent;
+        font:
+          11px/1.45 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+      .tx-row:hover {
+        background: #f3f9fc;
+        border-left-color: #16a1ba;
+      }
+      .tx-row .tx-key {
+        color: #087c95;
+        font-size: 10px;
+        letter-spacing: 0.015em;
+        white-space: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .tx-row .tx-key::-webkit-scrollbar {
+        display: none;
+      }
+      .tx-row .tx-value {
+        margin-left: 10px;
+        padding-left: 10px;
+        border-left: 1px solid #d5e0ea;
+        color: #33475f;
+        overflow-wrap: anywhere;
+      }
+      .tx-row.pending .tx-value {
+        color: #8a98a8;
+        font-style: italic;
+      }
+      .tx-row.sensitive .tx-value {
+        border-left-color: #e3bd72;
+        color: #925600;
+      }
+      .tx-foot {
+        padding: 14px 18px 17px;
+        border-top: 1px solid #dce6ef;
+        background: #f8fafc;
+      }
+      .tx-actions {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .tx-actions button {
+        padding: 7px 10px;
+        border-color: #b9c9d8;
+        background: #fff;
+        color: #344b65;
+        font-size: 11px;
+      }
+      .tx-note {
+        margin: 0;
+        color: #718095;
+        font-size: 11px;
+        line-height: 1.55;
+      }
+      .pod-list {
+        margin-top: 22px;
+      }
+      .pod-list .page-head {
+        align-items: center;
+      }
+      .pod-toolbar {
+        display: flex;
+        align-items: end;
+        gap: 9px;
+        flex-wrap: wrap;
+      }
+      .pod-toolbar label {
+        min-width: 150px;
+      }
+      .pod-count {
+        align-self: center;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .pod-table button,
+      .pod-card button {
+        padding: 6px 9px;
+        font-size: 12px;
+      }
+      .pod-table table {
+        min-width: 900px;
+        table-layout: fixed;
+      }
+      .pod-table th:nth-child(1) {
+        width: 13%;
+      }
+      .pod-table th:nth-child(2) {
+        width: 8%;
+      }
+      .pod-table th:nth-child(3) {
+        width: 23%;
+      }
+      .pod-table th:nth-child(4) {
+        width: 12%;
+      }
+      .pod-table th:nth-child(5) {
+        width: 20%;
+      }
+      .pod-table th:nth-child(6) {
+        width: 12%;
+      }
+      .pod-table th:nth-child(7) {
+        width: 7%;
+      }
+      .pod-table td {
+        overflow-wrap: anywhere;
+        vertical-align: top;
+      }
+      .pod-cards {
+        display: none;
+        gap: 10px;
+      }
+      .pod-card {
+        padding: 15px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: #f9fbfd;
+      }
+      .pod-card-head,
+      .pod-card-foot,
+      .pod-pagination {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      .pod-card dl {
+        display: grid;
+        grid-template-columns: 78px minmax(0, 1fr);
+        gap: 7px 10px;
+        margin: 14px 0;
+        font-size: 12px;
+      }
+      .pod-card dt,
+      .pod-detail-grid dt {
+        color: var(--muted);
+      }
+      .pod-card dd,
+      .pod-detail-grid dd {
+        min-width: 0;
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .pod-pagination {
+        justify-content: flex-end;
+        margin-top: 16px;
+      }
+      .pod-pagination span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .pod-dialog {
+        width: min(560px, calc(100vw - 28px));
+        max-height: calc(100vh - 28px);
+        margin: auto 14px auto auto;
+        padding: 0;
+        border: 1px solid #c9d6e3;
+        border-radius: 16px;
+        background: #fff;
+        color: var(--ink);
+        box-shadow: 0 28px 80px rgba(28, 52, 84, 0.22);
+      }
+      .pod-dialog::backdrop {
+        background: rgba(25, 42, 64, 0.28);
+        backdrop-filter: blur(2px);
+      }
+      .pod-dialog-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 20px 22px;
+        border-bottom: 1px solid var(--line);
+      }
+      .pod-dialog-head button {
+        align-self: start;
+      }
+      .pod-detail-body {
+        padding: 20px 22px 24px;
+        overflow: auto;
+      }
+      .pod-error {
+        margin-bottom: 18px;
+        padding: 13px 14px;
+        border: 1px solid #f1c5c0;
+        border-radius: 10px;
+        background: #fff5f4;
+        color: var(--red);
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      .pod-detail-grid {
+        display: grid;
+        grid-template-columns: 125px minmax(0, 1fr);
+        gap: 12px 16px;
+        margin: 0;
+        font-size: 13px;
+      }
+      @media (max-width: 1160px) {
+        .pod-compose {
+          grid-template-columns: 1fr;
+        }
+        .transaction-preview {
+          position: static;
+        }
+        .tx-body {
+          max-height: 560px;
+        }
+      }
+      @media (max-width: 520px) {
+        .form-grid,
+        .inline-control {
+          grid-template-columns: 1fr;
+        }
+        .tx-summary {
+          grid-template-columns: 1fr;
+        }
+        .tx-summary > div + div {
+          border-left: 0;
+          border-top: 1px solid #dce6ef;
+        }
+        .tx-row .tx-key {
+          white-space: normal;
+          overflow-wrap: anywhere;
+        }
+        .pod-list .page-head,
+        .pod-toolbar {
+          align-items: stretch;
+        }
+        .pod-toolbar > * {
+          width: 100%;
+        }
+        .pod-table {
+          display: none;
+        }
+        .pod-cards {
+          display: grid;
+        }
+        .pod-pagination {
+          justify-content: space-between;
+        }
+        .pod-dialog {
+          width: calc(100vw - 16px);
+          max-height: calc(100vh - 16px);
+          margin: auto;
+        }
+        .pod-detail-grid {
+          grid-template-columns: 1fr;
+          gap: 4px;
+        }
+        .pod-detail-grid dd {
+          margin-bottom: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="side">
+        <div class="brand">
+          <span>AGENT RUNTIME CONTROL</span><b>Agent Runtime Hub</b>
+        </div>
+        <nav class="nav">
+          <small>MANAGER</small><a href="/admin">管理总览</a
+          ><a href="/admin/users">用户与密钥</a
+          ><a class="active" href="/admin/hymatrix">Hymatrix Pods</a>
+          <div class="divider"></div>
+          <small>RESOURCES</small><a href="/admin/google">Google 资源池</a
+          ><a href="/admin/telegram">Telegram 资源池</a
+          ><a href="/admin/test">资源 API 测试</a>
+        </nav>
+      </aside>
+      <main class="content">
+        <header class="page-head">
+          <div>
+            <div class="eyebrow">Manager · deployment control</div>
+            <h1>Hymatrix Pods</h1>
+            <p>
+              一次 Spawn 交易注入完整运行环境，Module 中的 start-hermes
+              会随容器自启动。
+            </p>
+          </div>
+          <label class="admin-key"
+            >Manager Admin API Key<input
+              id="adminKey"
+              type="password"
+              placeholder="所有管理页面共用"
+          /></label>
+        </header>
+        <section class="pod-layout">
+          <div class="pod-compose">
+            <article class="card pod-builder">
+              <div class="builder-head">
+                <div>
+                  <h2>创建 Pod</h2>
+                  <p>
+                    填写本次交易实际使用的参数。带锁标识的字段保存后不会回显。
+                  </p>
+                </div>
+                <span class="pill">SPAWN</span>
+              </div>
+              <form id="form">
+                <fieldset>
+                  <legend>01 · Pod 基础配置</legend>
+                  <div class="form-grid">
+                    <label
+                      >选择用户<select id="userId" required>
+                        <option value="">加载用户中…</option>
+                      </select></label
+                    ><label
+                      >可用 Gateway API Key<select
+                        id="accessKeyId"
+                        required
+                        disabled
+                      >
+                        <option value="">请先选择用户</option></select
+                      ><small id="noAccessKey" class="no-access-key" hidden
+                        >当前用户没有可用 Key，<a
+                          id="createAccessKeyLink"
+                          href="/admin/users"
+                          >前往创建 Gateway API Key</a
+                        ></small
+                      ></label
+                    ><label>Pod 名称<input id="name" required /></label
+                    ><label
+                      >Runtime Type<input
+                        id="runtimeType"
+                        required
+                        value="hermes" /></label
+                    ><label class="wide"
+                      >Hub Gateway URL<input
+                        id="gatewayUrl"
+                        type="url"
+                        required
+                      /><small
+                        >默认使用当前管理页面域名；部署到其他 Gateway
+                        时可以修改。</small
+                      ></label
+                    ><label class="wide"
+                      >Telegram Bot Token 🔒<span class="inline-control"
+                        ><input
+                          id="botToken"
+                          type="password"
+                          required
+                          placeholder="可手动填写，或使用所选 Key 从 Resources 领取"
+                        /><button
+                          id="acquireBot"
+                          type="button"
+                          class="secondary"
+                        >
+                          从 Resources 领取
+                        </button></span
+                      ><small id="telegramBotLink" class="bot-link" hidden
+                        ><span>Bot 链接</span
+                        ><a
+                          id="telegramBotAnchor"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        ></a></small
+                    ></label>
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>02 · Node 配置</legend>
+                  <div class="form-grid">
+                    <label
+                      >Node URL<input
+                        id="nodeUrl"
+                        type="url"
+                        required
+                        value="http://52.220.233.136:8081"
+                      /><small
+                        >Manager 会代理访问 Node URL 的 /info，并自动读取
+                        Node.Acc-Id。</small
+                      ></label
+                    ><label
+                      >Scheduler（自动获取）<input
+                        id="scheduler"
+                        required
+                        readonly
+                        placeholder="填写 Node URL 后自动获取" /></label
+                    ><label class="wide"
+                      >Module<input
+                        id="module"
+                        required
+                        value="G0hsaVf5gKq25JoIsEGzPfGIcKNKZofgX3i2gDivQjU"
+                    /></label>
+                    <details class="advanced-config wide">
+                      <summary>高级配置 · 自动生成的运行密钥</summary>
+                      <div class="advanced-config-body">
+                        <label
+                          >Hermes API Server Key 🔒<span class="inline-control"
+                            ><input
+                              id="hermesGatewayToken"
+                              type="password"
+                              required
+                            /><button
+                              id="generateHermesKey"
+                              type="button"
+                              class="secondary"
+                            >
+                              重新生成
+                            </button></span
+                          ><small
+                            >同时用于 API_SERVER_KEY 与
+                            HERMES_GATEWAY_TOKEN，默认随机生成。</small
+                          ></label
+                        ><label
+                          >Private Key 🔒<textarea
+                            id="privateKey"
+                            required
+                            rows="3"
+                          ></textarea
+                          ><small
+                            >前端固定测试私钥，仅适用于当前测试环境；不要用于持有真实资产。</small
+                          ></label
+                        >
+                      </div>
+                    </details>
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>03 · LLM 运行配置</legend>
+                  <div class="form-grid">
+                    <label
+                      >Provider<input
+                        id="llmProvider"
+                        required
+                        value="custom" /></label
+                    ><label
+                      >Model<input
+                        id="llmModel"
+                        required
+                        value="deepseek-chat" /></label
+                    ><label class="wide"
+                      >Base URL<input
+                        id="llmBaseUrl"
+                        type="url"
+                        required
+                        value="https://api.deepseek.com" /></label
+                    ><label class="wide"
+                      >LLM API Key 🔒<input
+                        id="llmApiKey"
+                        type="password"
+                        required
+                        placeholder="sk-..."
+                    /></label>
+                  </div>
+                </fieldset>
+                <div id="spawnRequirements" class="missing-list"></div>
+                <div class="actions">
+                  <button id="spawn" type="submit" disabled>
+                    发送 Spawn 交易</button
+                  ><span id="status" class="status"></span>
+                </div>
+              </form>
+            </article>
+            <aside class="card transaction-preview" aria-live="polite">
+              <div class="tx-head">
+                <div>
+                  <div class="eyebrow">Hymx · Spawn envelope</div>
+                  <h2>待发送交易</h2>
+                </div>
+                <span id="txState" class="tx-state">待补全</span>
+              </div>
+              <div class="tx-summary">
+                <div>
+                  <span class="tx-label">Node endpoint</span
+                  ><code id="txNode">—</code>
+                </div>
+                <div>
+                  <span class="tx-label">Signer</span
+                  ><code id="txSigner">测试私钥 · 未显示</code>
+                </div>
+              </div>
+              <div id="txBody" class="tx-body"></div>
+              <div class="tx-foot">
+                <div class="tx-actions">
+                  <button id="toggleSecrets" type="button">显示敏感值</button
+                  ><button id="copyTx" type="button">复制预览</button>
+                </div>
+                <p class="tx-note">
+                  按 SDK 实际标签顺序预览。时间戳由 Manager / SDK
+                  在发送瞬间生成；Gateway Secret 由所选 Access Key 在后端解析。
+                </p>
+              </div>
+            </aside>
+          </div>
+          <article class="card pod-list">
+            <div class="page-head">
+              <div>
+                <h2>Pod 列表</h2>
+                <p>筛选运行记录并查看失败原因；密钥等敏感参数始终隐藏。</p>
+              </div>
+              <div class="pod-toolbar">
+                <label
+                  >状态
+                  <select id="podStatusFilter">
+                    <option value="all">全部状态</option>
+                    <option value="active">进行中</option>
+                    <option value="running">运行中</option>
+                    <option value="failed">失败</option>
+                  </select>
+                </label>
+                <span id="podCount" class="pod-count"></span>
+                <button id="refresh" class="secondary">刷新</button>
+              </div>
+            </div>
+            <div id="pods">
+              <div class="empty">输入 Manager Admin API Key 后刷新。</div>
+            </div>
+            <div id="podPagination" class="pod-pagination" hidden></div>
+          </article>
+        </section>
+      </main>
+    </div>
+    <dialog id="podDetail" class="pod-dialog">
+      <div class="pod-dialog-head">
+        <div>
+          <span class="eyebrow">Pod record</span>
+          <h2 id="podDetailTitle">Pod 详情</h2>
+        </div>
+        <button id="closePodDetail" type="button" class="secondary">关闭</button>
+      </div>
+      <div id="podDetailBody" class="pod-detail-body"></div>
+    </dialog>
+    <script src="/admin/assets/common.js"></script>
+    <script>
+      function randomHex(bytes = 32) {
+        const values = new Uint8Array(bytes);
+        crypto.getRandomValues(values);
+        return Array.from(values, (value) =>
+          value.toString(16).padStart(2, "0"),
+        ).join("");
+      }
+      function randomPodName() {
+        return `hermes-${randomHex(4)}`;
+      }
+      const testPrivateKey =
+        "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+      $("privateKey").value = testPrivateKey;
+      $("name").value = randomPodName();
+      $("gatewayUrl").value = window.location.origin;
+      $("hermesGatewayToken").value = randomHex();
+      initAdminKey();
+      let revealTxSecrets = false;
+      let spawnSubmitting = false;
+      let telegramLinkRequest = 0;
+      let allPods = [];
+      let podPage = 1;
+      const podPageSize = 20;
+      function showTelegramBotLink(link, username) {
+        const container = $("telegramBotLink");
+        const anchor = $("telegramBotAnchor");
+        container.classList.remove("error");
+        container.firstElementChild.textContent = "Bot 链接";
+        container.hidden = !link;
+        anchor.hidden = !link;
+        if (!link) return;
+        anchor.href = link;
+        anchor.textContent = `t.me/${String(username || "").replace(/^@/, "")}`;
+      }
+      async function resolveTelegramBotLink() {
+        const requestID = ++telegramLinkRequest;
+        const token = $("botToken").value.trim();
+        showTelegramBotLink("", "");
+        if (!token) return;
+        try {
+          const result = await adminRequest("/v1/admin/telegram/bot-link", {
+            method: "POST",
+            body: JSON.stringify({ botToken: token }),
+          });
+          if (requestID === telegramLinkRequest)
+            showTelegramBotLink(result.botLink, result.username);
+        } catch (error) {
+          if (requestID !== telegramLinkRequest) return;
+          const container = $("telegramBotLink");
+          container.hidden = false;
+          container.classList.add("error");
+          container.firstElementChild.textContent =
+            "无法获取 Bot 链接，请检查 Token";
+          $("telegramBotAnchor").hidden = true;
+        }
+      }
+      function masked(value) {
+        const text = String(value || "");
+        if (!text) return "—";
+        if (text.startsWith("<")) return text;
+        if (text.length < 9) return "••••••••";
+        return `${text.slice(0, 4)}••••${text.slice(-4)}`;
+      }
+      function selectedAccessKey() {
+        const select = $("accessKeyId");
+        if (!select.value) return "";
+        return (select.options[select.selectedIndex]?.text || "").split(
+          " · ",
+        )[0];
+      }
+      function transactionPreview() {
+        const env = [
+          ["Container-Env-RUNTIME_TYPE", $("runtimeType").value.trim(), false],
+          [
+            "Container-Env-HERMES_AGENT_LLM_PROVIDER",
+            $("llmProvider").value.trim() || "custom",
+            false,
+          ],
+          [
+            "Container-Env-HERMES_AGENT_LLM_MODEL",
+            $("llmModel").value.trim(),
+            false,
+          ],
+          [
+            "Container-Env-HERMES_AGENT_LLM_BASE_URL",
+            $("llmBaseUrl").value.trim(),
+            false,
+          ],
+          [
+            "Container-Env-HERMES_AGENT_LLM_API_KEY",
+            $("llmApiKey").value.trim(),
+            true,
+          ],
+          [
+            "Container-Env-HUB_GATEWAY_URL",
+            $("gatewayUrl").value.trim(),
+            false,
+          ],
+          [
+            "Container-Env-HUB_GATEWAY_API_KEY",
+            selectedAccessKey()
+              ? `<${selectedAccessKey()} secret>`
+              : "<selected Access Key secret>",
+            true,
+          ],
+          ["Container-Env-API_SERVER_ENABLED", "true", false],
+          [
+            "Container-Env-API_SERVER_KEY",
+            $("hermesGatewayToken").value.trim(),
+            true,
+          ],
+          [
+            "Container-Env-HERMES_GATEWAY_TOKEN",
+            $("hermesGatewayToken").value.trim(),
+            true,
+          ],
+        ];
+        const bot = $("botToken").value.trim();
+        if (bot)
+          env.push([
+            "Container-Env-HERMES_AGENT_TELEGRAM_BOT_TOKEN",
+            bot,
+            true,
+          ]);
+        const tags = [
+          ["SDK-Timestamp", "<UnixNano generated by SDK>", false],
+          ["Data-Protocol", "hymx", false],
+          ["Variant", "v0.1.0", false],
+          ["Type", "Process", false],
+          ["Module", $("module").value.trim(), false],
+          ["Scheduler", $("scheduler").value.trim(), false],
+          ["Hub-Spawn-Timestamp", "<UnixNano generated by Manager>", false],
+          ...env,
+        ];
+        return {
+          target: "",
+          data: "<UnixNano generated by SDK>",
+          nodeUrl: $("nodeUrl").value.trim(),
+          tags,
+        };
+      }
+      function txPreviewRow([key, value, sensitive]) {
+        return `<div class="tx-row${sensitive ? " sensitive" : ""}${!value ? " pending" : ""}"><span class="tx-key">${esc(key)}</span><span class="tx-value">${esc(sensitive && !revealTxSecrets ? masked(value) : value || "<not set>")}</span></div>`;
+      }
+      function isSpawnFormComplete() {
+        const requiredIDs = Object.keys(spawnFieldLabels);
+        return (
+          currentManagerAdminKey() !== "" &&
+          requiredIDs.every((id) => $(id).value.trim() !== "") &&
+          $("form").checkValidity()
+        );
+      }
+      const spawnFieldLabels = {
+        userId: "用户",
+        accessKeyId: "Gateway API Key",
+        name: "Pod 名称",
+        runtimeType: "Runtime Type",
+        gatewayUrl: "Hub Gateway URL",
+        botToken: "Telegram Bot Token",
+        nodeUrl: "Node URL",
+        scheduler: "Scheduler",
+        module: "Module",
+        hermesGatewayToken: "Hermes API Key",
+        privateKey: "Private Key",
+        llmProvider: "LLM Provider",
+        llmModel: "LLM Model",
+        llmBaseUrl: "LLM Base URL",
+        llmApiKey: "LLM API Key",
+      };
+      function renderMissingFields() {
+        const missing = Object.entries(spawnFieldLabels).filter(
+          ([id]) => !$(id).value.trim() || !$(id).checkValidity(),
+        );
+        for (const id of Object.keys(spawnFieldLabels))
+          $(id)
+            .closest("label")
+            ?.classList.toggle(
+              "field-missing",
+              missing.some(([missingID]) => missingID === id),
+            );
+        const container = $("spawnRequirements");
+        container.classList.toggle(
+          "complete",
+          missing.length === 0 && currentManagerAdminKey() !== "",
+        );
+        if (currentManagerAdminKey() === "")
+          missing.unshift(["adminKey", "Manager Admin API Key"]);
+        if (!missing.length) {
+          container.textContent = "✓ 配置完整，可以发送 Spawn 交易";
+          return;
+        }
+        container.innerHTML = `<strong>还需完成 ${missing.length} 项：</strong>${missing.map(([id, label]) => `<button type="button" data-missing-field="${id}">${label}</button>`).join("")}`;
+      }
+      function renderTxPreview() {
+        const tx = transactionPreview();
+        const ready = isSpawnFormComplete();
+        $("spawn").disabled = spawnSubmitting || !ready;
+        renderMissingFields();
+        $("txState").textContent = ready ? "结构就绪" : "待补全";
+        $("txState").classList.toggle("ready", ready);
+        $("txNode").textContent = tx.nodeUrl || "—";
+        $("txSigner").textContent = $("privateKey").value.trim()
+          ? "ECC 私钥 · 已配置"
+          : "ECC 私钥 · 未配置";
+        const envelope = [
+          ["Target", tx.target || "<empty>", false],
+          ["Data", tx.data, false],
+        ];
+        const protocol = tx.tags.filter(
+          ([key]) => !key.startsWith("Container-Env-"),
+        );
+        const environment = tx.tags.filter(([key]) =>
+          key.startsWith("Container-Env-"),
+        );
+        $("txBody").innerHTML =
+          `<div class="tx-section">Envelope</div>${envelope.map(txPreviewRow).join("")}<div class="tx-section">Protocol tags · ${protocol.length}</div>${protocol.map(txPreviewRow).join("")}<div class="tx-section">Container environment · ${environment.length}</div>${environment.map(txPreviewRow).join("")}`;
+      }
+      function serializableTx() {
+        const tx = transactionPreview();
+        return {
+          Target: tx.target,
+          Data: tx.data,
+          Tags: tx.tags.map(([name, value, sensitive]) => ({
+            name,
+            value: sensitive && !revealTxSecrets ? masked(value) : value,
+          })),
+        };
+      }
+      $("form").addEventListener("input", renderTxPreview);
+      $("form").addEventListener("change", renderTxPreview);
+      $("spawnRequirements").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-missing-field]");
+        if (!button) return;
+        const field = $(button.dataset.missingField);
+        field?.closest("details")?.setAttribute("open", "");
+        field?.focus();
+      });
+      $("toggleSecrets").onclick = () => {
+        revealTxSecrets = !revealTxSecrets;
+        $("toggleSecrets").textContent = revealTxSecrets
+          ? "隐藏敏感值"
+          : "显示敏感值";
+        renderTxPreview();
+      };
+      $("generateHermesKey").onclick = () => {
+        $("hermesGatewayToken").value = randomHex();
+        renderTxPreview();
+      };
+      $("copyTx").onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(
+            JSON.stringify(serializableTx(), null, 2),
+          );
+          $("copyTx").textContent = "已复制";
+          setTimeout(() => {
+            $("copyTx").textContent = "复制预览";
+          }, 1200);
+        } catch (_) {
+          showStatus($("status"), "浏览器拒绝访问剪贴板");
+        }
+      };
+      async function loadFormOptions() {
+        const previous = $("userId").value;
+        $("userId").disabled = true;
+        $("userId").innerHTML = '<option value="">加载用户中…</option>';
+        try {
+          const d = await adminRequest("/v1/admin/users/options");
+          $("userId").innerHTML =
+            '<option value="">请选择用户</option>' +
+            d.items
+              .map(
+                (u) =>
+                  `<option value="${esc(u.id)}">${esc(u.name)} · ${esc(u.id)}</option>`,
+              )
+              .join("");
+          $("userId").disabled = false;
+          if (previous && d.items.some((u) => u.id === previous)) {
+            $("userId").value = previous;
+            await loadKeys();
+          }
+          showStatus($("status"), "用户列表已更新", true);
+        } catch (e) {
+          $("userId").innerHTML = '<option value="">用户加载失败</option>';
+          showStatus($("status"), e.message);
+        }
+      }
+      async function loadKeys() {
+        const userId = $("userId").value;
+        $("createAccessKeyLink").href = userId
+          ? `/admin/users?userId=${encodeURIComponent(userId)}`
+          : "/admin/users";
+        $("noAccessKey").hidden = true;
+        $("accessKeyId").disabled = true;
+        $("accessKeyId").innerHTML = '<option value="">加载中…</option>';
+        if (!userId) {
+          $("accessKeyId").innerHTML = '<option value="">请先选择用户</option>';
+          renderTxPreview();
+          return;
+        }
+        try {
+          const d = await adminRequest(
+            `/v1/admin/users/${encodeURIComponent(userId)}/access-keys/available`,
+          );
+          $("accessKeyId").innerHTML =
+            '<option value="">请选择未使用的 API Key</option>' +
+            d.items
+              .map(
+                (k) =>
+                  `<option value="${esc(k.id)}">${esc(k.keyPrefix)} · ${esc(k.createdAt)}</option>`,
+              )
+              .join("");
+          $("accessKeyId").disabled = d.items.length === 0;
+          $("noAccessKey").hidden = d.items.length !== 0;
+          if (!d.items.length)
+            $("accessKeyId").innerHTML =
+              '<option value="">该用户没有未使用的 API Key</option>';
+        } catch (e) {
+          $("accessKeyId").innerHTML =
+            `<option value="">${esc(e.message)}</option>`;
+        }
+        renderTxPreview();
+      }
+      async function resolveScheduler() {
+        const nodeUrl = $("nodeUrl").value.trim();
+        $("scheduler").value = "";
+        renderTxPreview();
+        if (!nodeUrl) return "";
+        const info = await adminRequest(
+          `/v1/admin/hymatrix/node-info?nodeUrl=${encodeURIComponent(nodeUrl)}`,
+        );
+        const scheduler = String(info.scheduler || "").trim();
+        if (!scheduler) throw new Error("Node /info 缺少 Node.Acc-Id");
+        $("scheduler").value = scheduler;
+        renderTxPreview();
+        return scheduler;
+      }
+      $("nodeUrl").addEventListener("change", async () => {
+        try {
+          await resolveScheduler();
+          showStatus($("status"), "Scheduler 已从 Node /info 自动获取", true);
+        } catch (e) {
+          showStatus($("status"), e.message);
+        }
+      });
+      $("botToken").addEventListener("change", resolveTelegramBotLink);
+      $("userId").onchange = loadKeys;
+      $("acquireBot").onclick = async () => {
+        const id = $("accessKeyId").value;
+        if (!id) {
+          showStatus($("status"), "请先选择一个未使用的 API Key");
+          return;
+        }
+        setBusy($("acquireBot"), true, "领取中…");
+        try {
+          const d = await adminRequest(
+            `/v1/admin/access-keys/${encodeURIComponent(id)}/telegram-bot`,
+            { method: "POST" },
+          );
+          $("botToken").value = d.botToken;
+          if (d.botLink) showTelegramBotLink(d.botLink, d.username);
+          else await resolveTelegramBotLink();
+          renderTxPreview();
+          showStatus($("status"), "Telegram Bot 已领取并自动填充", true);
+        } catch (e) {
+          showStatus($("status"), e.message);
+        } finally {
+          setBusy($("acquireBot"), false);
+        }
+      };
+      document.addEventListener("manager-admin-key-change", () => {
+        loadFormOptions();
+        load();
+        renderTxPreview();
+        resolveScheduler().catch((error) =>
+          showStatus($("status"), error.message),
+        );
+      });
+      loadFormOptions();
+      resolveScheduler().catch(() => {});
+      if (currentManagerAdminKey()) load();
+      renderTxPreview();
+      function formatPodTime(value) {
+        if (!value) return "—";
+        const date = new Date(value);
+        return Number.isNaN(date.getTime())
+          ? String(value)
+          : date.toLocaleString("zh-CN", { hour12: false });
+      }
+      function filteredPods() {
+        const filter = $("podStatusFilter").value;
+        if (filter === "all") return allPods;
+        if (filter === "active")
+          return allPods.filter((pod) =>
+            ["spawning", "spawned", "running"].includes(pod.status),
+          );
+        return allPods.filter((pod) => pod.status === filter);
+      }
+      function renderPodPagination(total, pages) {
+        const pagination = $("podPagination");
+        pagination.hidden = total <= podPageSize;
+        if (pagination.hidden) {
+          pagination.innerHTML = "";
+          return;
+        }
+        pagination.innerHTML = `<button type="button" class="secondary" data-pod-page="prev" ${podPage === 1 ? "disabled" : ""}>上一页</button><span>第 ${podPage} / ${pages} 页</span><button type="button" class="secondary" data-pod-page="next" ${podPage === pages ? "disabled" : ""}>下一页</button>`;
+      }
+      function renderPods() {
+        const filtered = filteredPods();
+        const pages = Math.max(1, Math.ceil(filtered.length / podPageSize));
+        podPage = Math.min(podPage, pages);
+        const visible = filtered.slice(
+          (podPage - 1) * podPageSize,
+          podPage * podPageSize,
+        );
+        $("podCount").textContent = `${filtered.length} 条记录`;
+        if (!visible.length) {
+          $("pods").innerHTML = '<div class="empty">当前筛选下暂无 Pod</div>';
+          renderPodPagination(0, 1);
+          return;
+        }
+        const rows = visible
+          .map(
+            (p) =>
+              `<tr><td><b>${esc(p.name)}</b><br><small>${esc(p.userId)}</small></td><td>${esc(p.runtimeType)}</td><td>${esc(p.module)}<br><small>${esc(p.scheduler)}</small></td><td>${esc(p.llmProvider || "—")} / ${esc(p.llmModel || "—")}</td><td>${esc(p.pid || "—")}</td><td>${esc(formatPodTime(p.createdAt))}</td><td>${pill(p.status)}</td><td><button type="button" class="secondary" data-pod-detail="${esc(p.id)}">详情</button></td></tr>`,
+          )
+          .join("");
+        const cards = visible
+          .map(
+            (p) =>
+              `<article class="pod-card"><div class="pod-card-head"><div><b>${esc(p.name)}</b><br><small>${esc(p.userId)}</small></div>${pill(p.status)}</div><dl><dt>Runtime</dt><dd>${esc(p.runtimeType)}</dd><dt>LLM</dt><dd>${esc(p.llmProvider || "—")} / ${esc(p.llmModel || "—")}</dd><dt>PID</dt><dd>${esc(p.pid || "—")}</dd><dt>创建时间</dt><dd>${esc(formatPodTime(p.createdAt))}</dd></dl><div class="pod-card-foot"><small>${p.error ? "有失败信息可查看" : "交易配置已隐藏敏感值"}</small><button type="button" class="secondary" data-pod-detail="${esc(p.id)}">查看详情</button></div></article>`,
+          )
+          .join("");
+        $("pods").innerHTML = `<div class="table-wrap pod-table"><table><thead><tr><th>Pod / 用户</th><th>Runtime</th><th>Module / Scheduler</th><th>LLM</th><th>PID</th><th>创建时间</th><th>状态</th><th></th></tr></thead><tbody>${rows}</tbody></table></div><div class="pod-cards">${cards}</div>`;
+        renderPodPagination(filtered.length, pages);
+      }
+      function openPodDetail(id) {
+        const pod = allPods.find((item) => item.id === id);
+        if (!pod) return;
+        $("podDetailTitle").textContent = pod.name || "Pod 详情";
+        $("podDetailBody").innerHTML = `${pod.error ? `<div class="pod-error"><b>失败原因</b><br>${esc(pod.error)}</div>` : ""}<dl class="pod-detail-grid"><dt>状态</dt><dd>${pill(pod.status)}</dd><dt>用户</dt><dd>${esc(pod.userId)}</dd><dt>Runtime</dt><dd>${esc(pod.runtimeType)}</dd><dt>创建时间</dt><dd>${esc(formatPodTime(pod.createdAt))}</dd><dt>Node URL</dt><dd>${esc(pod.nodeUrl)}</dd><dt>Module</dt><dd>${esc(pod.module)}</dd><dt>Scheduler</dt><dd>${esc(pod.scheduler)}</dd><dt>PID</dt><dd>${esc(pod.pid || "—")}</dd><dt>LLM</dt><dd>${esc(pod.llmProvider || "—")} / ${esc(pod.llmModel || "—")}</dd><dt>LLM Base URL</dt><dd>${esc(pod.llmBaseUrl || "—")}</dd><dt>Access Key</dt><dd>${esc(pod.accessKeyId || "—")}</dd></dl>`;
+        $("podDetail").showModal();
+      }
+      async function load() {
+        try {
+          const d = await adminRequest("/v1/admin/hymatrix/pods");
+          allPods = Array.isArray(d.items) ? d.items : [];
+          podPage = 1;
+          renderPods();
+        } catch (e) {
+          $("pods").innerHTML =
+            `<div class="empty error">${esc(e.message)}</div>`;
+          $("podCount").textContent = "";
+          $("podPagination").hidden = true;
+        }
+      }
+      $("podStatusFilter").onchange = () => {
+        podPage = 1;
+        renderPods();
+      };
+      $("pods").onclick = (event) => {
+        const button = event.target.closest("[data-pod-detail]");
+        if (button) openPodDetail(button.dataset.podDetail);
+      };
+      $("podPagination").onclick = (event) => {
+        const button = event.target.closest("[data-pod-page]");
+        if (!button || button.disabled) return;
+        podPage += button.dataset.podPage === "next" ? 1 : -1;
+        renderPods();
+      };
+      $("closePodDetail").onclick = () => $("podDetail").close();
+      $("podDetail").onclick = (event) => {
+        if (event.target === $("podDetail")) $("podDetail").close();
+      };
+      $("refresh").onclick = load;
+      $("form").onsubmit = async (e) => {
+        e.preventDefault();
+        if (!isSpawnFormComplete()) {
+          renderTxPreview();
+          return;
+        }
+        spawnSubmitting = true;
+        setBusy($("spawn"), true, "校验 Node…");
+        try {
+          await resolveScheduler();
+          setBusy($("spawn"), true, "发送交易中…");
+          await adminRequest("/v1/admin/hymatrix/pods", {
+            method: "POST",
+            body: JSON.stringify({
+              userId: $("userId").value.trim(),
+              name: $("name").value.trim(),
+              runtimeType: $("runtimeType").value.trim(),
+              accessKeyId: $("accessKeyId").value,
+              botToken: $("botToken").value.trim(),
+              gatewayUrl: $("gatewayUrl").value.trim(),
+              hermesGatewayToken: $("hermesGatewayToken").value.trim(),
+              nodeUrl: $("nodeUrl").value.trim(),
+              privateKey: $("privateKey").value.trim(),
+              module: $("module").value.trim(),
+              llm: {
+                apiKey: $("llmApiKey").value.trim(),
+                baseUrl: $("llmBaseUrl").value.trim(),
+                model: $("llmModel").value.trim(),
+                provider: $("llmProvider").value.trim(),
+              },
+            }),
+          });
+          showStatus(
+            $("status"),
+            "Spawn 交易完成，start-hermes 正在容器中自启动",
+            true,
+          );
+          $("hermesGatewayToken").value = randomHex();
+          $("name").value = randomPodName();
+          renderTxPreview();
+          await loadKeys();
+          load();
+        } catch (x) {
+          showStatus($("status"), x.message);
+        } finally {
+          spawnSubmitting = false;
+          setBusy($("spawn"), false);
+          renderTxPreview();
+        }
+      };
+    </script>
+  </body>
+</html>

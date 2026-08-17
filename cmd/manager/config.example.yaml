@@ -1,0 +1,12 @@
+env: local
+port: ":8086"
+ginMode: debug
+
+postgres:
+  dsn: postgresql://postgres@127.0.0.1:5432/hub_manager?sslmode=disable
+admin:
+  apiKey: replace-with-manager-admin-api-key
+resources:
+  baseURL: http://127.0.0.1:8085
+  adminAPIKey: must-match-resouces-admin-api-key
+  timeout: 30s

@@ -1,4 +1,4 @@
-# Agent Access Gateway Domain
+# Hub Domain
 
 ## Language
 
