@@ -55,6 +55,20 @@ func TestWeixinPageIsStandaloneLocalHermesTest(t *testing.T) {
 	}
 }
 
+func TestWeixinPageRevealsAndFocusesEnvironmentAfterScan(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterRoutes(router)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/weixin", nil))
+	body := recorder.Body.String()
+	for _, expected := range []string{`id="resultCard"`, `$("resultCard").hidden=false`, `$("resultCard").scrollIntoView({behavior:"smooth",block:"start"})`} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("Weixin success flow is missing %q", expected)
+		}
+	}
+}
+
 func TestAdminPagesAutoLoadWithStoredManagerKey(t *testing.T) {
 	for path, expected := range map[string]string{
 		"/admin":          "if(currentManagerAdminKey())load()",
