@@ -5,7 +5,7 @@
   <title>Weixin 扫码测试</title>
   <link rel="stylesheet" href="/admin/assets/common.css"><link rel="stylesheet" href="/admin/assets/admin-enhancements.css">
   <style>
-    .bind-grid{display:grid;grid-template-columns:minmax(320px,480px) minmax(360px,1fr);gap:20px}.qr-box{text-align:center}.qr-box img{width:320px;max-width:100%;border-radius:16px;background:#fff;padding:12px}.result textarea{width:100%;min-height:190px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.warning{color:#9a5a00}.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}@media(max-width:900px){.bind-grid{grid-template-columns:1fr}}
+    .bind-grid{display:grid;grid-template-columns:minmax(320px,480px) minmax(360px,1fr);gap:20px}.qr-box{text-align:center}.qr-box img{width:320px;max-width:100%;border-radius:16px;background:#fff;padding:12px}.weixin-result textarea{width:100%;min-height:190px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.warning{color:#9a5a00}.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}@media(max-width:900px){.bind-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body><div class="shell">
@@ -14,7 +14,7 @@
     <header class="page-head"><div><div class="eyebrow">RESOURCES · ILINK BOT</div><h1>Weixin 扫码测试</h1><p>只验证微信 iLink 绑定并生成本地 Hermes 环境变量，不创建 HyMatrix Pod。</p></div><label class="admin-key">Manager Admin API Key<input id="adminKey" type="password" placeholder="所有管理页面共用"></label></header>
     <section class="bind-grid">
       <article class="card qr-box"><h2>1. 扫码绑定</h2><p>连接的是独立 iLink Bot 身份，主要用于私聊。</p><div class="actions"><button id="start">申请二维码</button><button id="cancel" class="secondary" hidden>取消</button></div><img id="qr" alt="微信扫码二维码" hidden><p id="status" class="status">点击“申请二维码”开始。</p></article>
-      <article id="resultCard" class="card result" hidden><h2>2. 本地 Hermes 配置</h2><p>确认后显示 <code>WEIXIN_ACCOUNT_ID</code>、<code>WEIXIN_TOKEN</code>、<code>WEIXIN_BASE_URL</code> 和扫码用户 allowlist。</p><p class="warning">WEIXIN_TOKEN 是敏感凭证，仅用于本地测试，请勿写入日志或提交 Git。</p><textarea id="dotenv" readonly placeholder="扫码确认后在这里显示 .env 内容"></textarea><div class="actions"><button id="copy" class="secondary" disabled>复制 .env</button></div><p>把内容加入 <code>~/.hermes/.env</code>，然后重启 <code>hermes gateway run</code>。</p></article>
+      <article id="resultCard" class="card weixin-result" hidden><h2>2. 本地 Hermes 配置</h2><p>确认后显示 <code>WEIXIN_ACCOUNT_ID</code>、<code>WEIXIN_TOKEN</code>、<code>WEIXIN_BASE_URL</code> 和扫码用户 allowlist。</p><p class="warning">WEIXIN_TOKEN 是敏感凭证，仅用于本地测试，请勿写入日志或提交 Git。</p><textarea id="dotenv" readonly placeholder="扫码确认后在这里显示 .env 内容"></textarea><div class="actions"><button id="copy" class="secondary" disabled>复制 .env</button></div><p>把内容加入 <code>~/.hermes/.env</code>，然后重启 <code>hermes gateway run</code>。</p></article>
     </section>
   </main>
 </div><script src="/admin/assets/common.js"></script><script>

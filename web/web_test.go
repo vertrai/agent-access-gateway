@@ -62,10 +62,13 @@ func TestWeixinPageRevealsAndFocusesEnvironmentAfterScan(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/weixin", nil))
 	body := recorder.Body.String()
-	for _, expected := range []string{`id="resultCard"`, `$("resultCard").hidden=false`, `$("resultCard").scrollIntoView({behavior:"smooth",block:"start"})`} {
+	for _, expected := range []string{`id="resultCard" class="card weixin-result"`, `$("resultCard").hidden=false`, `$("resultCard").scrollIntoView({behavior:"smooth",block:"start"})`} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("Weixin success flow is missing %q", expected)
 		}
+	}
+	if strings.Contains(body, `id="resultCard" class="card result"`) {
+		t.Error("Weixin result card uses the globally hidden .result class")
 	}
 }
 
