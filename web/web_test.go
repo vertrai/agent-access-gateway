@@ -107,6 +107,10 @@ func TestUsersPageExplainsExistingAndNewUserIssuance(t *testing.T) {
 		`class="key-result issued-key"`,
 		"仅显示一次",
 		`id="newKey"`,
+		`id="gatewayUrl"`,
+		`id="copyGatewayUrl"`,
+		"window.location.origin",
+		"复制 Gateway URL",
 		"离开或刷新页面后，将无法再次查看完整 Key",
 	} {
 		if !strings.Contains(body, expected) {

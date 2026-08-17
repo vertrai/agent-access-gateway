@@ -135,7 +135,18 @@
         grid-template-columns: minmax(0, 1fr) auto;
         gap: 9px;
       }
-      .issued-key-value .result {
+      .delivery-field + .delivery-field {
+        margin-top: 12px;
+      }
+      .delivery-label {
+        display: block;
+        margin-bottom: 6px;
+        color: #48665b;
+        font-size: 11px;
+        font-weight: 750;
+      }
+      .issued-key-value .result,
+      .issued-key-value .delivery-value {
         display: block !important;
         min-width: 0;
         margin: 0;
@@ -145,6 +156,12 @@
         white-space: normal;
         word-break: break-all;
         font-size: 13px;
+      }
+      .issued-key-value .delivery-value {
+        border: 1px solid #b9d8ca;
+        border-radius: 9px;
+        color: #26394f;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       .issued-key-value button {
         white-space: nowrap;
@@ -298,9 +315,19 @@
                 </div>
                 <span class="one-time-badge">仅显示一次</span>
               </div>
-              <div class="issued-key-value">
-                <pre id="result" class="result"></pre>
-                <button id="copyKey" type="button">复制 API Key</button>
+              <div class="delivery-field">
+                <span class="delivery-label">Gateway URL</span>
+                <div class="issued-key-value">
+                  <code id="gatewayUrl" class="delivery-value"></code>
+                  <button id="copyGatewayUrl" type="button" class="secondary">复制 Gateway URL</button>
+                </div>
+              </div>
+              <div class="delivery-field">
+                <span class="delivery-label">Gateway API Key</span>
+                <div class="issued-key-value">
+                  <pre id="result" class="result"></pre>
+                  <button id="copyKey" type="button">复制 API Key</button>
+                </div>
               </div>
               <div class="issued-key-foot">
                 <p>离开或刷新页面后，将无法再次查看完整 Key。</p>
@@ -367,6 +394,7 @@
       const requestedUserId =
         new URLSearchParams(location.search).get("userId") || "";
       if (requestedUserId) $("userId").value = requestedUserId;
+      $("gatewayUrl").textContent = window.location.origin;
       let accessKeys = [];
       let editingAccessKeyId = "";
       function scopeBadges(k) {
@@ -478,6 +506,18 @@
           setTimeout(() => (button.textContent = label), 1400);
         } catch (e) {
           showStatus($("status"), "复制失败，请选中 Key 手动复制");
+        }
+      };
+      $("copyGatewayUrl").onclick = async () => {
+        const gatewayUrl = $("gatewayUrl").textContent.trim();
+        try {
+          await navigator.clipboard.writeText(gatewayUrl);
+          const button = $("copyGatewayUrl"),
+            label = button.textContent;
+          button.textContent = "✓ 已复制";
+          setTimeout(() => (button.textContent = label), 1400);
+        } catch (e) {
+          showStatus($("status"), "复制失败，请选中 Gateway URL 手动复制");
         }
       };
       $("newKey").onclick = () => {
