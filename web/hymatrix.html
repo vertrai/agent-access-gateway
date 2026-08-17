@@ -53,9 +53,81 @@
       .channel-options {display:flex;gap:16px;flex-wrap:wrap;padding:12px;border:1px solid var(--line);border-radius:10px;background:#f8fafc}
       .channel-options label {display:flex;align-items:center;gap:8px}
       .channel-options input {width:auto}
-      .weixin-auth-dialog {max-width:460px;text-align:center}
-      .weixin-auth-dialog img {display:block;width:320px;max-width:100%;margin:18px auto;border-radius:14px;background:#fff;padding:10px}
-      .weixin-auth-dialog .actions {justify-content:center;margin-top:14px}
+      .weixin-auth-dialog {
+        width: min(420px, calc(100vw - 28px));
+        max-width: none;
+        max-height: calc(100vh - 40px);
+        margin: auto;
+        overflow: hidden;
+        text-align: center;
+        border-radius: 18px;
+        box-shadow: 0 24px 64px rgba(18, 38, 63, 0.28);
+      }
+      .weixin-auth-dialog .pod-dialog-head {
+        align-items: center;
+        padding: 17px 19px 15px;
+        text-align: left;
+      }
+      .weixin-auth-dialog .pod-dialog-head h2 {
+        margin-top: 5px;
+        font-size: 20px;
+      }
+      .weixin-auth-dialog .pod-dialog-head button {
+        padding: 8px 11px;
+        font-size: 12px;
+      }
+      .weixin-auth-body {
+        display: grid;
+        justify-items: center;
+        gap: 13px;
+        padding: 18px 22px 20px;
+        overflow: auto;
+      }
+      .weixin-auth-copy {
+        font-size: 13px;
+      }
+      .weixin-qr-stage {
+        display: grid;
+        place-items: center;
+        width: min(276px, 100%);
+        aspect-ratio: 1;
+        padding: 10px;
+        border: 1px solid #d8e3ed;
+        border-radius: 16px;
+        background: #f6f9fc;
+        box-shadow: inset 0 0 0 5px #fff;
+      }
+      .weixin-qr-stage:has(img[hidden]) {
+        display: none;
+      }
+      .weixin-auth-dialog img {
+        display: block;
+        width: 100%;
+        max-width: 254px;
+        margin: 0;
+        padding: 0;
+        border-radius: 8px;
+        background: #fff;
+      }
+      #weixinAuthStatus {
+        min-height: 0;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: #edf8f4;
+        font-size: 12px;
+      }
+      #weixinAuthStatus.error {
+        background: #fff2f0;
+      }
+      .weixin-auth-dialog .actions {
+        justify-content: center;
+        min-height: 36px;
+        margin: 0;
+      }
+      .weixin-auth-dialog .actions button {
+        padding: 8px 12px;
+        font-size: 12px;
+      }
       .bot-link {
         display: flex;
         align-items: center;
@@ -780,10 +852,12 @@
     </dialog>
     <dialog id="weixinAuthDialog" class="pod-dialog weixin-auth-dialog">
       <div class="pod-dialog-head"><div><span class="eyebrow">WEIXIN · ILINK BOT</span><h2>微信扫码授权</h2></div><button id="closeWeixinAuth" type="button" class="secondary">关闭</button></div>
-      <p>请使用微信扫描二维码，并在微信中确认授权。</p>
-      <img id="weixinAuthQR" alt="微信扫码授权二维码" hidden>
-      <p id="weixinAuthStatus" class="status">正在申请二维码…</p>
-      <div class="actions"><button id="retryWeixinAuth" type="button" class="secondary" hidden>重新申请</button></div>
+      <div class="weixin-auth-body">
+        <p class="weixin-auth-copy">打开微信扫一扫，并在手机端确认授权</p>
+        <div class="weixin-qr-stage"><img id="weixinAuthQR" alt="微信扫码授权二维码" hidden></div>
+        <p id="weixinAuthStatus" class="status">正在申请二维码…</p>
+        <div class="actions"><button id="retryWeixinAuth" type="button" class="secondary" hidden>重新申请</button></div>
+      </div>
     </dialog>
     <script src="/admin/assets/common.js"></script>
     <script>
