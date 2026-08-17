@@ -48,6 +48,7 @@ func (m *Manager) router() *gin.Engine {
 	admin.GET("/weixin/onboarding/:attempt", m.pollWeixinOnboarding)
 	admin.GET("/weixin/onboarding/:attempt/credentials", m.getWeixinOnboardingCredentials)
 	admin.DELETE("/weixin/onboarding/:attempt", m.cancelWeixinOnboarding)
+	admin.GET("/weixin/bots", m.listWeixinBots)
 	for _, route := range []struct{ method, path string }{
 		{http.MethodGet, "/google-user"}, {http.MethodGet, "/google-user/access-token"},
 		{http.MethodPost, "/google-user/test/gmail/send"}, {http.MethodPost, "/google-user/test/drive/folders"},
@@ -280,6 +281,8 @@ func (m *Manager) spawnPod(c *gin.Context) {
 	}
 	var req struct {
 		UserID, Name, RuntimeType, AccessKeyID, BotToken string
+		EnableTelegram                                   bool   `json:"enableTelegram"`
+		WeixinBotID                                      string `json:"weixinBotId"`
 		GatewayURL                                       string `json:"gatewayUrl"`
 		HermesGatewayToken                               string `json:"hermesGatewayToken"`
 		NodeURL, PrivateKey, Module                      string
@@ -296,6 +299,12 @@ func (m *Manager) spawnPod(c *gin.Context) {
 	}
 	req.GatewayURL = strings.TrimRight(strings.TrimSpace(req.GatewayURL), "/")
 	req.HermesGatewayToken = strings.TrimSpace(req.HermesGatewayToken)
+	req.BotToken = strings.TrimSpace(req.BotToken)
+	telegramEnabled := req.EnableTelegram || req.BotToken != "" || req.RuntimeType == "telegramcustomer"
+	if !telegramEnabled && strings.TrimSpace(req.WeixinBotID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one messaging channel (Telegram or Weixin) is required"})
+		return
+	}
 	if req.HermesGatewayToken == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "hermesGatewayToken is required"})
 		return
@@ -327,6 +336,17 @@ func (m *Manager) spawnPod(c *gin.Context) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
+	var weixinBot schema.WeixinBot
+	req.WeixinBotID = strings.TrimSpace(req.WeixinBotID)
+	if req.WeixinBotID != "" {
+		if err := m.wdb.Db.Where("id = ? AND user_id = ? AND status = ?", req.WeixinBotID, req.UserID, schema.WeixinBotStatusAvailable).First(&weixinBot).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusConflict, gin.H{"error": "Weixin bot is unavailable, belongs to another user, or is already assigned"})
+			return
+		} else if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
 	config := HymatrixConfig{NodeURL: req.NodeURL, PrivateKey: req.PrivateKey, Module: req.Module, Scheduler: scheduler, LLMAPIKey: req.LLM.APIKey, LLMBaseURL: req.LLM.BaseURL, LLMModel: req.LLM.Model, LLMProvider: req.LLM.Provider}
 	client, err := NewHymatrixClient(config)
 	if err != nil {
@@ -334,7 +354,7 @@ func (m *Manager) spawnPod(c *gin.Context) {
 		return
 	}
 	podID := "pod_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	pod := schema.HymatrixPod{ID: podID, UserID: req.UserID, Name: req.Name, RuntimeType: req.RuntimeType, PID: "pending_" + podID, Status: schema.PodStatusSpawning, NodeURL: req.NodeURL, PrivateKey: req.PrivateKey, Module: req.Module, Scheduler: scheduler, LLMAPIKey: req.LLM.APIKey, LLMBaseURL: req.LLM.BaseURL, LLMModel: req.LLM.Model, LLMProvider: req.LLM.Provider, GatewayAPIKey: accessKey.Secret, AccessKeyID: accessKey.ID, BotToken: strings.TrimSpace(req.BotToken)}
+	pod := schema.HymatrixPod{ID: podID, UserID: req.UserID, Name: req.Name, RuntimeType: req.RuntimeType, PID: "pending_" + podID, Status: schema.PodStatusSpawning, NodeURL: req.NodeURL, PrivateKey: req.PrivateKey, Module: req.Module, Scheduler: scheduler, LLMAPIKey: req.LLM.APIKey, LLMBaseURL: req.LLM.BaseURL, LLMModel: req.LLM.Model, LLMProvider: req.LLM.Provider, GatewayAPIKey: accessKey.Secret, AccessKeyID: accessKey.ID, BotToken: strings.TrimSpace(req.BotToken), WeixinBotID: req.WeixinBotID}
 	if pod.Name == "" {
 		pod.Name = req.RuntimeType
 	}
@@ -346,18 +366,32 @@ func (m *Manager) spawnPod(c *gin.Context) {
 		if result.RowsAffected != 1 {
 			return fmt.Errorf("access key was assigned concurrently")
 		}
+		if req.WeixinBotID != "" {
+			result = tx.Model(&schema.WeixinBot{}).Where("id = ? AND user_id = ? AND status = ?", req.WeixinBotID, req.UserID, schema.WeixinBotStatusAvailable).Updates(map[string]any{"status": schema.WeixinBotStatusAssigned, "assigned_pod_id": pod.ID})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return fmt.Errorf("Weixin bot was assigned concurrently")
+			}
+		}
 		return tx.Create(&pod).Error
 	}); reserveErr != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": reserveErr.Error()})
 		return
 	}
 	botToken := pod.BotToken
-	if botToken == "" && req.RuntimeType == "telegramcustomer" {
+	if botToken == "" && telegramEnabled {
 		botToken, err = m.resources.telegramBot(c.Request.Context(), accessKey.Secret)
 	}
 	var pid string
 	if err == nil {
-		pid, err = client.Spawn(c.Request.Context(), PodSpawnInput{RuntimeType: req.RuntimeType, GatewayURL: req.GatewayURL, GatewayAPIKey: accessKey.Secret, BotToken: botToken, HermesGatewayToken: req.HermesGatewayToken})
+		pid, err = client.Spawn(c.Request.Context(), PodSpawnInput{
+			RuntimeType: req.RuntimeType, GatewayURL: req.GatewayURL, GatewayAPIKey: accessKey.Secret,
+			BotToken: botToken, HermesGatewayToken: req.HermesGatewayToken,
+			WeixinAccountID: weixinBot.AccountID, WeixinToken: weixinBot.Token,
+			WeixinBaseURL: weixinBot.BaseURL, WeixinAllowedUsers: weixinBot.AllowedUserID,
+		})
 	}
 	if err != nil {
 		pod.Status = schema.PodStatusFailed
@@ -372,7 +406,12 @@ func (m *Manager) spawnPod(c *gin.Context) {
 			return err
 		}
 		if err != nil {
-			return tx.Model(&schema.AccessKey{}).Where("id = ? AND assigned_pod_id = ?", accessKey.ID, pod.ID).Updates(map[string]any{"status": "available", "assigned_pod_id": nil}).Error
+			if releaseErr := tx.Model(&schema.AccessKey{}).Where("id = ? AND assigned_pod_id = ?", accessKey.ID, pod.ID).Updates(map[string]any{"status": "available", "assigned_pod_id": nil}).Error; releaseErr != nil {
+				return releaseErr
+			}
+			if req.WeixinBotID != "" {
+				return tx.Model(&schema.WeixinBot{}).Where("id = ? AND assigned_pod_id = ?", req.WeixinBotID, pod.ID).Updates(map[string]any{"status": schema.WeixinBotStatusAvailable, "assigned_pod_id": nil}).Error
+			}
 		}
 		return nil
 	}); saveErr != nil {

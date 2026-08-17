@@ -119,7 +119,7 @@ func TestBuildPodSpawnTagsRequiresHermesGatewayToken(t *testing.T) {
 }
 
 func TestBuildPodSpawnTagSetsSeparatesSecrets(t *testing.T) {
-	plain, secret, err := buildPodSpawnTagSets(HymatrixConfig{LLMAPIKey: "llm-secret"}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret", HermesGatewayToken: "gateway-token"})
+	plain, secret, err := buildPodSpawnTagSets(HymatrixConfig{LLMAPIKey: "llm-secret"}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret", HermesGatewayToken: "gateway-token", WeixinAccountID: "bot@im.bot", WeixinToken: "weixin-token", WeixinBaseURL: "https://ilinkai.weixin.qq.com", WeixinAllowedUsers: "user@im.wechat"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,12 +130,22 @@ func TestBuildPodSpawnTagSetsSeparatesSecrets(t *testing.T) {
 	for _, tag := range secret {
 		secretValues[tag.Name] = tag.Value
 	}
-	for name, want := range map[string]string{"Container-Env-HERMES_AGENT_LLM_API_KEY": "llm-secret", "Container-Env-HUB_GATEWAY_API_KEY": "gateway-secret", "Container-Env-HERMES_GATEWAY_TOKEN": "gateway-token"} {
+	for name, want := range map[string]string{"Container-Env-HERMES_AGENT_LLM_API_KEY": "llm-secret", "Container-Env-HUB_GATEWAY_API_KEY": "gateway-secret", "Container-Env-HERMES_GATEWAY_TOKEN": "gateway-token", "Container-Env-HERMES_AGENT_WEIXIN_ACCOUNT_ID": "bot@im.bot", "Container-Env-HERMES_AGENT_WEIXIN_TOKEN": "weixin-token", "Container-Env-HERMES_AGENT_WEIXIN_BASE_URL": "https://ilinkai.weixin.qq.com", "Container-Env-HERMES_AGENT_WEIXIN_ALLOWED_USERS": "user@im.wechat"} {
 		if secretValues[name] != want {
 			t.Errorf("secret tag %s = %q, want %q", name, secretValues[name], want)
 		}
 		if _, leaked := plainValues[name]; leaked {
 			t.Errorf("secret tag %s leaked into plaintext set", name)
 		}
+	}
+}
+
+func TestBuildPodSpawnTagSetsRejectsPartialWeixinCredentials(t *testing.T) {
+	_, _, err := buildPodSpawnTagSets(HymatrixConfig{}, PodSpawnInput{
+		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
+		HermesGatewayToken: "gateway-token", WeixinToken: "partial-token",
+	})
+	if err == nil || !strings.Contains(err.Error(), "complete set") {
+		t.Fatalf("expected incomplete Weixin credentials error, got %v", err)
 	}
 }

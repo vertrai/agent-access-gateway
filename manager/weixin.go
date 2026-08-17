@@ -12,12 +12,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/vertrai/hub/manager/schema"
+	"gorm.io/gorm/clause"
 	"rsc.io/qr"
 )
 
 const weixinAttemptLifetime = 10 * time.Minute
 
 type WeixinCredentials struct {
+	BotID     string
 	AccountID string
 	Token     string
 	BaseURL   string
@@ -38,6 +41,17 @@ func (m *Manager) startWeixinOnboarding(c *gin.Context) {
 	if c.ShouldBindJSON(&input) != nil || strings.TrimSpace(input.UserID) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "userId is required"})
 		return
+	}
+	input.UserID = strings.TrimSpace(input.UserID)
+	if m.wdb != nil {
+		var count int64
+		if err := m.wdb.Db.Model(&schema.User{}).Where("id = ?", input.UserID).Count(&count).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		} else if count == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "manager user not found"})
+			return
+		}
 	}
 	var payload struct {
 		QRCode string `json:"qrcode"`
@@ -61,7 +75,7 @@ func (m *Manager) startWeixinOnboarding(c *gin.Context) {
 		return
 	}
 	qrDataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(code.PNG())
-	attempt := weixinAttempt{ID: uuid.NewString(), UserID: strings.TrimSpace(input.UserID), PollSecret: payload.QRCode, QRContent: content, ProviderBase: m.weixinBaseURL, ExpiresAt: time.Now().UTC().Add(weixinAttemptLifetime)}
+	attempt := weixinAttempt{ID: uuid.NewString(), UserID: input.UserID, PollSecret: payload.QRCode, QRContent: content, ProviderBase: m.weixinBaseURL, ExpiresAt: time.Now().UTC().Add(weixinAttemptLifetime)}
 	m.weixinMu.Lock()
 	for id, old := range m.weixinAttempts {
 		deadline := old.ExpiresAt
@@ -158,6 +172,38 @@ func (m *Manager) pollWeixinOnboarding(c *gin.Context) {
 	}
 	credential.BaseURL = base
 	attempt.Credentials = credential
+	if m.wdb != nil {
+		bot := schema.WeixinBot{
+			ID: "wxb_" + strings.ReplaceAll(uuid.NewString(), "-", ""), UserID: attempt.UserID,
+			AccountID: credential.AccountID, Token: credential.Token, BaseURL: credential.BaseURL,
+			AllowedUserID: credential.UserID, Status: schema.WeixinBotStatusAvailable, AuthorizedAt: time.Now().UTC(),
+		}
+		result := m.wdb.Db.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "account_id"}},
+			DoUpdates: clause.Assignments(map[string]any{
+				"token": bot.Token, "base_url": bot.BaseURL,
+				"allowed_user_id": bot.AllowedUserID, "authorized_at": bot.AuthorizedAt,
+			}),
+			Where: clause.Where{Exprs: []clause.Expression{
+				clause.Eq{Column: clause.Column{Table: "manager_weixin_bots", Name: "user_id"}, Value: bot.UserID},
+				clause.Eq{Column: clause.Column{Table: "manager_weixin_bots", Name: "status"}, Value: schema.WeixinBotStatusAvailable},
+			}},
+		}).Create(&bot)
+		if result.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "store Weixin bot: " + result.Error.Error()})
+			return
+		}
+		if result.RowsAffected != 1 {
+			c.JSON(http.StatusConflict, gin.H{"error": "this Weixin bot belongs to another user or has already been assigned"})
+			return
+		}
+		var stored schema.WeixinBot
+		if err := m.wdb.Db.Where("account_id = ?", bot.AccountID).First(&stored).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "load stored Weixin bot: " + err.Error()})
+			return
+		}
+		credential.BotID = stored.ID
+	}
 	attempt.CredentialExpiresAt = time.Now().UTC().Add(24 * time.Hour)
 	m.updateWeixinAttempt(attempt)
 	c.JSON(http.StatusOK, gin.H{"state": "connected", "accountId": credential.AccountID, "userId": credential.UserID})
@@ -192,7 +238,27 @@ func (m *Manager) getWeixinOnboardingCredentials(c *gin.Context) {
 	}
 	dotenv := fmt.Sprintf("WEIXIN_ACCOUNT_ID=%s\nWEIXIN_TOKEN=%s\nWEIXIN_BASE_URL=%s\nWEIXIN_DM_POLICY=allowlist\nWEIXIN_ALLOWED_USERS=%s\n", credentials.AccountID, credentials.Token, credentials.BaseURL, credentials.UserID)
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, gin.H{"env": env, "dotenv": dotenv})
+	c.JSON(http.StatusOK, gin.H{"botId": credentials.BotID, "env": env, "dotenv": dotenv})
+}
+
+func (m *Manager) listWeixinBots(c *gin.Context) {
+	if m.wdb == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "manager database is unavailable"})
+		return
+	}
+	userID := strings.TrimSpace(c.Query("userId"))
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "userId is required"})
+		return
+	}
+	query := m.wdb.Db.Where("user_id = ?", userID).Order("created_at desc")
+	var bots []schema.WeixinBot
+	if err := query.Find(&bots).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"items": bots})
 }
 
 func safeDotenvValue(value string) bool {

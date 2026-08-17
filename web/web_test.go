@@ -48,7 +48,7 @@ func TestWeixinPageIsStandaloneLocalHermesTest(t *testing.T) {
 	RegisterRoutes(router)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/weixin", nil))
-	for _, expected := range []string{"Weixin 扫码测试", "不创建 HyMatrix Pod", "WEIXIN_ACCOUNT_ID", "/v1/admin/weixin/onboarding", "复制 .env"} {
+	for _, expected := range []string{"Weixin Bot 授权", "一次性分配给 Hermes Pod", `id="userId"`, "WEIXIN_ACCOUNT_ID", "/v1/admin/weixin/onboarding", "复制 .env"} {
 		if !strings.Contains(recorder.Body.String(), expected) {
 			t.Errorf("Weixin page is missing %q", expected)
 		}
@@ -176,6 +176,25 @@ func TestHymatrixPageIncludesLiveTransactionPreview(t *testing.T) {
 	for _, expected := range []string{"待发送交易", "Envelope", "Protocol tags", "Container environment", "Hub-Spawn-Timestamp", "Container-Env-HERMES_AGENT_LLM_API_KEY", "显示敏感值", "复制预览", "telegramBotLink", "telegramAcquireHint", "当前 API Key 未开通 Telegram 资源", "/v1/admin/telegram/bot-link", "01 · Pod 基础配置", "02 · Node 配置", "http://52.220.233.136:8081", "G0hsaVf5gKq25JoIsEGzPfGIcKNKZofgX3i2gDivQjU", "randomPodName", "advanced-config"} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("Hymatrix page is missing %q", expected)
+		}
+	}
+}
+
+func TestHymatrixPageSupportsIndependentTelegramAndWeixinChannels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterRoutes(router)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/hymatrix", nil))
+	body := recorder.Body.String()
+	for _, expected := range []string{
+		`id="enableTelegram"`, `id="enableWeixin"`, `id="weixinBotId"`,
+		`/v1/admin/weixin/bots?userId=`, `enableTelegram: $("enableTelegram").checked`,
+		`weixinBotId: $("enableWeixin").checked`,
+		"Container-Env-HERMES_AGENT_WEIXIN_TOKEN",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("Hymatrix channel selection is missing %q", expected)
 		}
 	}
 }

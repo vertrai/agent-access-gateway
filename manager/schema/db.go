@@ -51,9 +51,33 @@ type HymatrixPod struct {
 	GatewayAPIKey string    `gorm:"type:text" json:"-"`
 	AccessKeyID   string    `gorm:"size:80;not null;index:idx_manager_hymatrix_pods_access_key_history" json:"accessKeyId"`
 	BotToken      string    `gorm:"type:text" json:"-"`
+	WeixinBotID   string    `gorm:"size:80;index" json:"weixinBotId,omitempty"`
 	Error         string    `gorm:"type:text" json:"error,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 func (HymatrixPod) TableName() string { return "manager_hymatrix_pods" }
+
+const (
+	WeixinBotStatusAvailable = "available"
+	WeixinBotStatusAssigned  = "assigned"
+)
+
+// WeixinBot is a user-authorized iLink identity. Unlike pooled Telegram bots,
+// it is created by a QR authorization and can be assigned to one Pod only.
+type WeixinBot struct {
+	ID            string    `gorm:"primaryKey;size:80" json:"id"`
+	UserID        string    `gorm:"size:80;not null;index" json:"userId"`
+	AccountID     string    `gorm:"size:200;not null;uniqueIndex" json:"accountId"`
+	Token         string    `gorm:"type:text;not null" json:"-"`
+	BaseURL       string    `gorm:"type:text;not null" json:"baseUrl"`
+	AllowedUserID string    `gorm:"size:240;not null" json:"allowedUserId"`
+	Status        string    `gorm:"size:24;not null;index" json:"status"`
+	AssignedPodID *string   `gorm:"size:80;uniqueIndex" json:"assignedPodId,omitempty"`
+	AuthorizedAt  time.Time `json:"authorizedAt"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}
+
+func (WeixinBot) TableName() string { return "manager_weixin_bots" }
