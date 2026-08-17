@@ -2,7 +2,9 @@ package starthermes
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -79,6 +81,52 @@ func TestWriteHermesGatewayEnvRejectsNewlines(t *testing.T) {
 	err := WriteHermesGatewayEnv(home, GatewayConfig{URL: "https://hub.example\nINJECTED=yes", APIKey: "gw_sk_test"})
 	if err == nil {
 		t.Fatal("expected newline validation error")
+	}
+}
+
+func TestConfigureTelegramAutoHomeChannelInstallsPlugin(t *testing.T) {
+	home := t.TempDir()
+	if err := ConfigureTelegramAutoHomeChannel(home, "/usr/bin/true"); err != nil {
+		t.Fatal(err)
+	}
+	pluginDirectory := filepath.Join(home, ".hermes", "plugins", telegramAutoHomePluginName)
+	for _, name := range []string{"plugin.yaml", "__init__.py"} {
+		path := filepath.Join(pluginDirectory, name)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("plugin file %s was not installed: %v", name, err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Errorf("plugin file %s mode = %o", name, info.Mode().Perm())
+		}
+	}
+}
+
+func TestTelegramAutoHomePluginPythonCompiles(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 is unavailable")
+	}
+	path := filepath.Join(t.TempDir(), "telegram_auto_home.py")
+	if err := os.WriteFile(path, []byte(telegramAutoHomePluginCode()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(python, "-m", "py_compile", path)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("generated Telegram auto-home plugin must compile: %v\n%s", err, output)
+	}
+}
+
+func TestTelegramAutoHomePluginDefaultsToDMOnly(t *testing.T) {
+	code := telegramAutoHomePluginCode()
+	for _, expected := range []string{
+		`chat_type != "dm"`,
+		`HERMES_AUTO_TELEGRAM_HOME_ALLOW_GROUPS`,
+		`ctx.register_hook("pre_gateway_dispatch", auto_set_telegram_home)`,
+	} {
+		if !strings.Contains(code, expected) {
+			t.Errorf("plugin is missing %q", expected)
+		}
 	}
 }
 

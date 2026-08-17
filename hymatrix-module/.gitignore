@@ -1,5 +1,6 @@
 /module/bin/start-hermes
 /tools/vmdocker-agent
 /tools/vmdockerv2/
+/build/
 __pycache__/
 *.pyc

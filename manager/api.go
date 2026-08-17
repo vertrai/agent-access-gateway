@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -24,9 +25,11 @@ func (m *Manager) router() *gin.Engine {
 	admin := r.Group("/v1/admin", m.requireAdmin)
 	admin.POST("/users", m.createUserAccessKey)
 	admin.GET("/users", m.listUsers)
+	admin.PATCH("/access-keys/:id/scopes", m.updateAccessKeyScopes)
 	admin.GET("/users/options", m.listUserOptions)
 	admin.GET("/users/:userId/access-keys/available", m.listAvailableAccessKeys)
 	admin.POST("/access-keys/:id/telegram-bot", m.acquireTelegramBot)
+	admin.POST("/telegram/bot-link", m.resolveTelegramBotLink)
 	for _, route := range []struct{ method, path string }{
 		{http.MethodPost, "/google/accounts"}, {http.MethodPost, "/google/accounts/batch"}, {http.MethodGet, "/google/accounts"},
 		{http.MethodPost, "/telegram/bots"}, {http.MethodGet, "/telegram/bots"}, {http.MethodPost, "/telegram/bots/create"},
@@ -36,6 +39,7 @@ func (m *Manager) router() *gin.Engine {
 	}
 	admin.POST("/hymatrix/pods", m.spawnPod)
 	admin.GET("/hymatrix/pods", m.listPods)
+	admin.GET("/hymatrix/node-info", m.hymatrixNodeInfo)
 	for _, route := range []struct{ method, path string }{
 		{http.MethodGet, "/google-user"}, {http.MethodGet, "/google-user/access-token"},
 		{http.MethodPost, "/google-user/test/gmail/send"}, {http.MethodPost, "/google-user/test/drive/folders"},
@@ -118,8 +122,11 @@ func (m *Manager) proxyGatewayResource(path string) gin.HandlerFunc {
 
 func (m *Manager) createUserAccessKey(c *gin.Context) {
 	var req struct {
-		UserID string `json:"userId"`
-		Name   string `json:"name"`
+		UserID        string `json:"userId"`
+		Name          string `json:"name"`
+		AllowGoogle   *bool  `json:"allowGoogle"`
+		AllowBrowser  *bool  `json:"allowBrowser"`
+		AllowTelegram *bool  `json:"allowTelegram"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.UserID) == "" {
 		c.JSON(400, gin.H{"error": "userId is required"})
@@ -138,7 +145,9 @@ func (m *Manager) createUserAccessKey(c *gin.Context) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	created, _, err := m.resources.createAccessKey(c.Request.Context(), req.UserID)
+	created, _, err := m.resources.createAccessKey(c.Request.Context(), req.UserID, ResourceScopes{
+		AllowGoogle: boolDefaultTrue(req.AllowGoogle), AllowBrowser: boolDefaultTrue(req.AllowBrowser), AllowTelegram: boolDefaultTrue(req.AllowTelegram),
+	})
 	if err != nil {
 		c.JSON(502, gin.H{"error": err.Error()})
 		return
@@ -149,6 +158,24 @@ func (m *Manager) createUserAccessKey(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"accessKey": created.AccessKey, "gatewayApiKey": created.GatewayAPIKey})
+}
+
+func boolDefaultTrue(value *bool) bool {
+	return value == nil || *value
+}
+
+func (m *Manager) updateAccessKeyScopes(c *gin.Context) {
+	var scopes ResourceScopes
+	if err := c.ShouldBindJSON(&scopes); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid resource scopes"})
+		return
+	}
+	key, status, err := m.resources.updateAccessKeyScopes(c.Request.Context(), c.Param("id"), scopes)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(status, gin.H{"accessKey": key})
 }
 
 func (m *Manager) listUserOptions(c *gin.Context) {
@@ -188,12 +215,12 @@ func (m *Manager) acquireTelegramBot(c *gin.Context) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	token, err := m.resources.telegramBot(c.Request.Context(), key.Secret)
+	bot, err := m.resources.telegramBotDetails(c.Request.Context(), key.Secret)
 	if err != nil {
 		c.JSON(502, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, gin.H{"botToken": token})
+	c.JSON(200, gin.H{"botToken": bot.BotToken, "username": bot.Username, "botLink": telegramBotLink(bot.Username)})
 }
 
 func (m *Manager) listUsers(c *gin.Context) {
@@ -237,7 +264,9 @@ func (m *Manager) spawnPod(c *gin.Context) {
 	}
 	var req struct {
 		UserID, Name, RuntimeType, AccessKeyID, BotToken string
-		NodeURL, PrivateKey, Module, Scheduler           string
+		GatewayURL                                       string `json:"gatewayUrl"`
+		HermesGatewayToken                               string `json:"hermesGatewayToken"`
+		NodeURL, PrivateKey, Module                      string
 		LLM                                              struct {
 			APIKey   string `json:"apiKey"`
 			BaseURL  string `json:"baseUrl"`
@@ -245,8 +274,19 @@ func (m *Manager) spawnPod(c *gin.Context) {
 			Provider string `json:"provider"`
 		} `json:"llm"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.UserID) == "" || strings.TrimSpace(req.RuntimeType) == "" || strings.TrimSpace(req.AccessKeyID) == "" || strings.TrimSpace(req.NodeURL) == "" || strings.TrimSpace(req.PrivateKey) == "" || strings.TrimSpace(req.Module) == "" || strings.TrimSpace(req.Scheduler) == "" {
-		c.JSON(400, gin.H{"error": "userId, runtimeType, accessKeyId, nodeUrl, privateKey, module and scheduler are required"})
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.UserID) == "" || strings.TrimSpace(req.RuntimeType) == "" || strings.TrimSpace(req.AccessKeyID) == "" || strings.TrimSpace(req.NodeURL) == "" || strings.TrimSpace(req.PrivateKey) == "" || strings.TrimSpace(req.Module) == "" {
+		c.JSON(400, gin.H{"error": "userId, runtimeType, accessKeyId, nodeUrl, privateKey and module are required"})
+		return
+	}
+	req.GatewayURL = strings.TrimRight(strings.TrimSpace(req.GatewayURL), "/")
+	req.HermesGatewayToken = strings.TrimSpace(req.HermesGatewayToken)
+	if req.HermesGatewayToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "hermesGatewayToken is required"})
+		return
+	}
+	gatewayURL, gatewayURLErr := url.Parse(req.GatewayURL)
+	if gatewayURLErr != nil || gatewayURL.Host == "" || (gatewayURL.Scheme != "http" && gatewayURL.Scheme != "https") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "gatewayUrl must be an absolute HTTP or HTTPS URL"})
 		return
 	}
 	req.LLM.Provider = strings.TrimSpace(req.LLM.Provider)
@@ -257,6 +297,12 @@ func (m *Manager) spawnPod(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "llm.model and llm.apiKey are required; llm.baseUrl is also required for custom provider"})
 		return
 	}
+	nodeInfo, err := fetchHymatrixNodeInfo(c.Request.Context(), req.NodeURL)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	scheduler := strings.TrimSpace(nodeInfo.Node.AccountID)
 	var accessKey schema.AccessKey
 	if err := m.wdb.Db.Where("id = ? AND user_id = ? AND status = ?", req.AccessKeyID, req.UserID, "available").First(&accessKey).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusConflict, gin.H{"error": "access key is unavailable, belongs to another user, or is already assigned"})
@@ -265,14 +311,14 @@ func (m *Manager) spawnPod(c *gin.Context) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	config := HymatrixConfig{NodeURL: req.NodeURL, PrivateKey: req.PrivateKey, Module: req.Module, Scheduler: req.Scheduler, LLMAPIKey: req.LLM.APIKey, LLMBaseURL: req.LLM.BaseURL, LLMModel: req.LLM.Model, LLMProvider: req.LLM.Provider}
+	config := HymatrixConfig{NodeURL: req.NodeURL, PrivateKey: req.PrivateKey, Module: req.Module, Scheduler: scheduler, LLMAPIKey: req.LLM.APIKey, LLMBaseURL: req.LLM.BaseURL, LLMModel: req.LLM.Model, LLMProvider: req.LLM.Provider}
 	client, err := NewHymatrixClient(config)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	podID := "pod_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	pod := schema.HymatrixPod{ID: podID, UserID: req.UserID, Name: req.Name, RuntimeType: req.RuntimeType, PID: "pending_" + podID, Status: schema.PodStatusSpawning, NodeURL: req.NodeURL, PrivateKey: req.PrivateKey, Module: req.Module, Scheduler: req.Scheduler, LLMAPIKey: req.LLM.APIKey, LLMBaseURL: req.LLM.BaseURL, LLMModel: req.LLM.Model, LLMProvider: req.LLM.Provider, GatewayAPIKey: accessKey.Secret, AccessKeyID: accessKey.ID, BotToken: strings.TrimSpace(req.BotToken)}
+	pod := schema.HymatrixPod{ID: podID, UserID: req.UserID, Name: req.Name, RuntimeType: req.RuntimeType, PID: "pending_" + podID, Status: schema.PodStatusSpawning, NodeURL: req.NodeURL, PrivateKey: req.PrivateKey, Module: req.Module, Scheduler: scheduler, LLMAPIKey: req.LLM.APIKey, LLMBaseURL: req.LLM.BaseURL, LLMModel: req.LLM.Model, LLMProvider: req.LLM.Provider, GatewayAPIKey: accessKey.Secret, AccessKeyID: accessKey.ID, BotToken: strings.TrimSpace(req.BotToken)}
 	if pod.Name == "" {
 		pod.Name = req.RuntimeType
 	}
@@ -295,7 +341,7 @@ func (m *Manager) spawnPod(c *gin.Context) {
 	}
 	var pid string
 	if err == nil {
-		pid, err = client.Spawn(c.Request.Context(), PodSpawnInput{RuntimeType: req.RuntimeType, GatewayURL: m.config.Resources.BaseURL, GatewayAPIKey: accessKey.Secret, BotToken: botToken})
+		pid, err = client.Spawn(c.Request.Context(), PodSpawnInput{RuntimeType: req.RuntimeType, GatewayURL: req.GatewayURL, GatewayAPIKey: accessKey.Secret, BotToken: botToken, HermesGatewayToken: req.HermesGatewayToken})
 	}
 	if err != nil {
 		pod.Status = schema.PodStatusFailed
@@ -322,6 +368,25 @@ func (m *Manager) spawnPod(c *gin.Context) {
 		return
 	}
 	c.JSON(201, gin.H{"pod": pod})
+}
+
+func (m *Manager) hymatrixNodeInfo(c *gin.Context) {
+	nodeURL := strings.TrimSpace(c.Query("nodeUrl"))
+	if nodeURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "nodeUrl is required"})
+		return
+	}
+	info, err := fetchHymatrixNodeInfo(c.Request.Context(), nodeURL)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"scheduler":   strings.TrimSpace(info.Node.AccountID),
+		"nodeName":    info.Node.Name,
+		"nodeVersion": info.NodeVersion,
+		"protocol":    info.Protocol,
+	})
 }
 func (m *Manager) listPods(c *gin.Context) {
 	var pods []schema.HymatrixPod

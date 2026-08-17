@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/vertrai/hub/resouces/schema"
 )
 
 func TestInfo(t *testing.T) {
@@ -13,6 +16,43 @@ func TestInfo(t *testing.T) {
 	g.router().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d", recorder.Code)
+	}
+}
+
+func TestResourceScopeMiddlewareRejectsDisabledResource(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	g := &Resouces{}
+	for _, test := range []struct {
+		scope string
+		key   schema.AccessKey
+	}{
+		{scope: resourceScopeGoogle, key: schema.AccessKey{AllowGoogle: false, AllowBrowser: true, AllowTelegram: true}},
+		{scope: resourceScopeBrowser, key: schema.AccessKey{AllowGoogle: true, AllowBrowser: false, AllowTelegram: true}},
+		{scope: resourceScopeTelegram, key: schema.AccessKey{AllowGoogle: true, AllowBrowser: true, AllowTelegram: false}},
+	} {
+		router := gin.New()
+		router.GET("/", func(c *gin.Context) {
+			c.Set(gatewayPrincipalContext, gatewayPrincipal{AccessKey: test.key})
+		}, g.requireResourceScope(test.scope), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+		if recorder.Code != http.StatusForbidden {
+			t.Errorf("scope %s status = %d", test.scope, recorder.Code)
+		}
+	}
+}
+
+func TestResourceScopeMiddlewareAllowsEnabledResource(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	g := &Resouces{}
+	router := gin.New()
+	router.GET("/", func(c *gin.Context) {
+		c.Set(gatewayPrincipalContext, gatewayPrincipal{AccessKey: schema.AccessKey{AllowGoogle: true}})
+	}, g.requireResourceScope(resourceScopeGoogle), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 

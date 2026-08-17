@@ -19,6 +19,12 @@ import (
 
 const gatewayPrincipalContext = "gatewayPrincipal"
 
+const (
+	resourceScopeGoogle   = "google"
+	resourceScopeBrowser  = "browser"
+	resourceScopeTelegram = "telegram"
+)
+
 type gatewayPrincipal struct {
 	AccessKey schema.AccessKey
 }
@@ -30,6 +36,7 @@ func (g *Resouces) router() *gin.Engine {
 	internal := r.Group("/v1/internal", g.requireAdmin)
 	internal.POST("/access-keys", g.createAccessKey)
 	internal.GET("/access-keys", g.listAccessKeys)
+	internal.PATCH("/access-keys/:id/scopes", g.updateAccessKeyScopes)
 	admin := internal
 	admin.POST("/google/accounts", g.createGoogleAccount)
 	admin.POST("/google/accounts/batch", g.createGoogleAccountsBatch)
@@ -43,14 +50,14 @@ func (g *Resouces) router() *gin.Engine {
 	admin.GET("/telegram/auth/status", g.telegramAuthStatus)
 	admin.GET("/telegram/auth/accounts", g.listTelegramAccounts)
 	user := r.Group("/v1", g.requireGatewayAPIKey)
-	user.GET("/google-user", g.getGoogleUser)
-	user.GET("/google-user/access-token", g.issueGoogleToken)
-	user.POST("/google-user/test/gmail/send", g.testSendGmail)
-	user.POST("/google-user/test/drive/folders", g.testCreateDriveFolder)
-	user.GET("/browser", g.currentBrowser)
-	user.POST("/browser/reset", g.resetBrowser)
-	user.POST("/browser/close", g.closeBrowser)
-	user.GET("/telegram-bot", g.getTelegramBot)
+	user.GET("/google-user", g.requireResourceScope(resourceScopeGoogle), g.getGoogleUser)
+	user.GET("/google-user/access-token", g.requireResourceScope(resourceScopeGoogle), g.issueGoogleToken)
+	user.POST("/google-user/test/gmail/send", g.requireResourceScope(resourceScopeGoogle), g.testSendGmail)
+	user.POST("/google-user/test/drive/folders", g.requireResourceScope(resourceScopeGoogle), g.testCreateDriveFolder)
+	user.GET("/browser", g.requireResourceScope(resourceScopeBrowser), g.currentBrowser)
+	user.POST("/browser/reset", g.requireResourceScope(resourceScopeBrowser), g.resetBrowser)
+	user.POST("/browser/close", g.requireResourceScope(resourceScopeBrowser), g.closeBrowser)
+	user.GET("/telegram-bot", g.requireResourceScope(resourceScopeTelegram), g.getTelegramBot)
 	return r
 }
 
@@ -104,7 +111,10 @@ func (g *Resouces) requireAdmin(c *gin.Context) {
 
 func (g *Resouces) createAccessKey(c *gin.Context) {
 	var req struct {
-		OwnerUserID string `json:"ownerUserId"`
+		OwnerUserID   string `json:"ownerUserId"`
+		AllowGoogle   *bool  `json:"allowGoogle"`
+		AllowBrowser  *bool  `json:"allowBrowser"`
+		AllowTelegram *bool  `json:"allowTelegram"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.OwnerUserID) == "" {
 		c.JSON(400, gin.H{"error": "ownerUserId is required"})
@@ -121,13 +131,56 @@ func (g *Resouces) createAccessKey(c *gin.Context) {
 		g.internalError(c, err)
 		return
 	}
-	accessKey := schema.AccessKey{ID: keyID, OwnerUserID: ownerUserID, KeyHash: hashSecret(key), KeyPrefix: secretPrefix(key), Status: schema.StatusActive}
-	err = g.wdb.Db.Create(&accessKey).Error
+	allowGoogle := boolDefaultTrue(req.AllowGoogle)
+	allowBrowser := boolDefaultTrue(req.AllowBrowser)
+	allowTelegram := boolDefaultTrue(req.AllowTelegram)
+	accessKey := schema.AccessKey{ID: keyID, OwnerUserID: ownerUserID, KeyHash: hashSecret(key), KeyPrefix: secretPrefix(key), Status: schema.StatusActive, AllowGoogle: true, AllowBrowser: true, AllowTelegram: true}
+	err = g.wdb.Db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&accessKey).Error; err != nil {
+			return err
+		}
+		return tx.Model(&accessKey).Updates(map[string]any{"allow_google": allowGoogle, "allow_browser": allowBrowser, "allow_telegram": allowTelegram}).Error
+	})
 	if err != nil {
 		g.internalError(c, err)
 		return
 	}
+	accessKey.AllowGoogle = allowGoogle
+	accessKey.AllowBrowser = allowBrowser
+	accessKey.AllowTelegram = allowTelegram
 	c.JSON(200, gin.H{"accessKey": accessKey, "gatewayApiKey": key})
+}
+
+func boolDefaultTrue(value *bool) bool {
+	return value == nil || *value
+}
+
+func (g *Resouces) updateAccessKeyScopes(c *gin.Context) {
+	var req struct {
+		AllowGoogle   *bool `json:"allowGoogle"`
+		AllowBrowser  *bool `json:"allowBrowser"`
+		AllowTelegram *bool `json:"allowTelegram"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.AllowGoogle == nil || req.AllowBrowser == nil || req.AllowTelegram == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "allowGoogle, allowBrowser and allowTelegram are required"})
+		return
+	}
+	var key schema.AccessKey
+	if err := g.wdb.Db.First(&key, "id = ?", c.Param("id")).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "access key not found"})
+		return
+	} else if err != nil {
+		g.internalError(c, err)
+		return
+	}
+	if err := g.wdb.Db.Model(&key).Updates(map[string]any{"allow_google": *req.AllowGoogle, "allow_browser": *req.AllowBrowser, "allow_telegram": *req.AllowTelegram}).Error; err != nil {
+		g.internalError(c, err)
+		return
+	}
+	key.AllowGoogle = *req.AllowGoogle
+	key.AllowBrowser = *req.AllowBrowser
+	key.AllowTelegram = *req.AllowTelegram
+	c.JSON(http.StatusOK, gin.H{"accessKey": key})
 }
 
 func (g *Resouces) createGoogleAccount(c *gin.Context) {
@@ -453,6 +506,20 @@ func (g *Resouces) requireGatewayAPIKey(c *gin.Context) {
 	now := time.Now()
 	_ = g.wdb.Db.Model(&key).Update("last_used_at", now).Error
 	c.Set(gatewayPrincipalContext, gatewayPrincipal{AccessKey: key})
+}
+
+func (g *Resouces) requireResourceScope(scope string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		key := mustGatewayPrincipal(c).AccessKey
+		allowed := map[string]bool{
+			resourceScopeGoogle:   key.AllowGoogle,
+			resourceScopeBrowser:  key.AllowBrowser,
+			resourceScopeTelegram: key.AllowTelegram,
+		}[scope]
+		if !allowed {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": scope + " resource is not allowed for this api key", "resource": scope})
+		}
+	}
 }
 
 func mustGatewayPrincipal(c *gin.Context) gatewayPrincipal {

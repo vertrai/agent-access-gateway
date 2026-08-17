@@ -63,8 +63,18 @@ type CreatedAccessKey struct {
 	GatewayAPIKey string            `json:"gatewayApiKey"`
 }
 
-func (c *ResourcesClient) createAccessKey(ctx context.Context, ownerUserID string) (CreatedAccessKey, int, error) {
-	raw, status, err := c.do(ctx, http.MethodPost, "/v1/internal/access-keys", map[string]string{"ownerUserId": ownerUserID}, "")
+type ResourceScopes struct {
+	AllowGoogle   bool `json:"allowGoogle"`
+	AllowBrowser  bool `json:"allowBrowser"`
+	AllowTelegram bool `json:"allowTelegram"`
+}
+
+func (c *ResourcesClient) createAccessKey(ctx context.Context, ownerUserID string, scopes ResourceScopes) (CreatedAccessKey, int, error) {
+	body := struct {
+		OwnerUserID string `json:"ownerUserId"`
+		ResourceScopes
+	}{OwnerUserID: ownerUserID, ResourceScopes: scopes}
+	raw, status, err := c.do(ctx, http.MethodPost, "/v1/internal/access-keys", body, "")
 	if err != nil {
 		return CreatedAccessKey{}, status, err
 	}
@@ -79,13 +89,33 @@ func (c *ResourcesClient) createAccessKey(ctx context.Context, ownerUserID strin
 }
 
 type ResourceAccessKey struct {
-	ID          string `json:"id"`
-	OwnerUserID string `json:"ownerUserId"`
-	KeyPrefix   string `json:"keyPrefix"`
-	Status      string `json:"status"`
-	GoogleEmail string `json:"googleEmail,omitempty"`
-	BrowserID   string `json:"browserId,omitempty"`
-	TelegramBot string `json:"telegramBot,omitempty"`
+	ID            string `json:"id"`
+	OwnerUserID   string `json:"ownerUserId"`
+	KeyPrefix     string `json:"keyPrefix"`
+	Status        string `json:"status"`
+	AllowGoogle   bool   `json:"allowGoogle"`
+	AllowBrowser  bool   `json:"allowBrowser"`
+	AllowTelegram bool   `json:"allowTelegram"`
+	GoogleEmail   string `json:"googleEmail,omitempty"`
+	BrowserID     string `json:"browserId,omitempty"`
+	TelegramBot   string `json:"telegramBot,omitempty"`
+}
+
+func (c *ResourcesClient) updateAccessKeyScopes(ctx context.Context, id string, scopes ResourceScopes) (ResourceAccessKey, int, error) {
+	raw, status, err := c.do(ctx, http.MethodPatch, "/v1/internal/access-keys/"+url.PathEscape(id)+"/scopes", scopes, "")
+	if err != nil {
+		return ResourceAccessKey{}, status, err
+	}
+	if status/100 != 2 {
+		return ResourceAccessKey{}, status, fmt.Errorf("resources update access key scopes: HTTP %d: %s", status, raw)
+	}
+	var result struct {
+		AccessKey ResourceAccessKey `json:"accessKey"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return ResourceAccessKey{}, status, err
+	}
+	return result.AccessKey, status, nil
 }
 
 func (c *ResourcesClient) listAccessKeys(ctx context.Context) ([]ResourceAccessKey, error) {
@@ -104,21 +134,30 @@ func (c *ResourcesClient) listAccessKeys(ctx context.Context) ([]ResourceAccessK
 	}
 	return result.Items, nil
 }
-func (c *ResourcesClient) telegramBot(ctx context.Context, key string) (string, error) {
+
+type ResourceTelegramBot struct {
+	BotToken string `json:"botToken"`
+	Username string `json:"username"`
+}
+
+func (c *ResourcesClient) telegramBotDetails(ctx context.Context, key string) (ResourceTelegramBot, error) {
 	raw, status, err := c.do(ctx, http.MethodGet, "/v1/telegram-bot", nil, key)
 	if err != nil {
-		return "", err
+		return ResourceTelegramBot{}, err
 	}
 	if status/100 != 2 {
-		return "", fmt.Errorf("resources telegram bot: HTTP %d: %s", status, raw)
+		return ResourceTelegramBot{}, fmt.Errorf("resources telegram bot: HTTP %d: %s", status, raw)
 	}
 	var result struct {
-		TelegramBot struct {
-			BotToken string `json:"botToken"`
-		} `json:"telegramBot"`
+		TelegramBot ResourceTelegramBot `json:"telegramBot"`
 	}
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return "", err
+		return ResourceTelegramBot{}, err
 	}
-	return result.TelegramBot.BotToken, nil
+	return result.TelegramBot, nil
+}
+
+func (c *ResourcesClient) telegramBot(ctx context.Context, key string) (string, error) {
+	bot, err := c.telegramBotDetails(ctx, key)
+	return bot.BotToken, err
 }

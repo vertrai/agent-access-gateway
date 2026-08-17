@@ -39,6 +39,11 @@ func Run() error {
 	if err := configureHermes(hermes); err != nil {
 		return err
 	}
+	if envFirst("HERMES_AGENT_TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "Bot_Token") != "" {
+		if err := ConfigureTelegramAutoHomeChannel(home, hermes); err != nil {
+			return fmt.Errorf("configure Telegram auto home channel: %w", err)
+		}
+	}
 	args := []string{hermes, "gateway", "run", "-q", "--replace", "--accept-hooks"}
 	if err := syscall.Exec(hermes, args, os.Environ()); err != nil {
 		return fmt.Errorf("exec Hermes gateway: %w", err)

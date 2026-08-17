@@ -11,14 +11,17 @@ const (
 )
 
 type AccessKey struct {
-	ID          string     `gorm:"primaryKey;size:80" json:"id"`
-	OwnerUserID string     `gorm:"size:80;not null;index" json:"ownerUserId"`
-	KeyHash     string     `gorm:"size:64;not null;uniqueIndex" json:"-"`
-	KeyPrefix   string     `gorm:"size:16;not null" json:"keyPrefix"`
-	Status      string     `gorm:"size:24;not null;index" json:"status"`
-	LastUsedAt  *time.Time `json:"lastUsedAt,omitempty"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	UpdatedAt   time.Time  `json:"updatedAt"`
+	ID            string     `gorm:"primaryKey;size:80" json:"id"`
+	OwnerUserID   string     `gorm:"size:80;not null;index" json:"ownerUserId"`
+	KeyHash       string     `gorm:"size:64;not null;uniqueIndex" json:"-"`
+	KeyPrefix     string     `gorm:"size:16;not null" json:"keyPrefix"`
+	Status        string     `gorm:"size:24;not null;index" json:"status"`
+	AllowGoogle   bool       `gorm:"not null;default:true" json:"allowGoogle"`
+	AllowBrowser  bool       `gorm:"not null;default:true" json:"allowBrowser"`
+	AllowTelegram bool       `gorm:"not null;default:true" json:"allowTelegram"`
+	LastUsedAt    *time.Time `json:"lastUsedAt,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
 }
 
 type Browser struct {

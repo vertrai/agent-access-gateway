@@ -26,6 +26,15 @@ func NewWdb(dsn string) (*Wdb, error) {
 	if err := w.Db.AutoMigrate(&schema.User{}, &schema.AccessKey{}, &schema.HymatrixPod{}); err != nil {
 		return nil, fmt.Errorf("migrate postgres: %w", err)
 	}
+	// AccessKeyID identifies both current and historical Pod attempts. The
+	// AccessKey.AssignedPodID unique index enforces the single active assignment;
+	// keeping AccessKeyID unique would prevent retrying after a failed Spawn.
+	const legacyPodAccessKeyIndex = "idx_manager_hymatrix_pods_access_key_id"
+	if w.Db.Migrator().HasIndex(&schema.HymatrixPod{}, legacyPodAccessKeyIndex) {
+		if err := w.Db.Migrator().DropIndex(&schema.HymatrixPod{}, legacyPodAccessKeyIndex); err != nil {
+			return nil, fmt.Errorf("drop legacy unique pod access-key index: %w", err)
+		}
+	}
 	return w, nil
 }
 

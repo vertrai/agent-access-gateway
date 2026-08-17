@@ -49,7 +49,7 @@ type HymatrixPod struct {
 	LLMModel      string    `gorm:"size:200" json:"llmModel,omitempty"`
 	LLMProvider   string    `gorm:"size:80" json:"llmProvider,omitempty"`
 	GatewayAPIKey string    `gorm:"type:text" json:"-"`
-	AccessKeyID   string    `gorm:"size:80;not null;uniqueIndex" json:"accessKeyId"`
+	AccessKeyID   string    `gorm:"size:80;not null;index:idx_manager_hymatrix_pods_access_key_history" json:"accessKeyId"`
 	BotToken      string    `gorm:"type:text" json:"-"`
 	Error         string    `gorm:"type:text" json:"error,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`

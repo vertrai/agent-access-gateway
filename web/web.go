@@ -34,6 +34,9 @@ var commonCSS []byte
 //go:embed common.js
 var commonJS []byte
 
+//go:embed admin-enhancements.css
+var adminEnhancementsCSS []byte
+
 // RegisterRoutes mounts the shared administration frontend on a backend.
 func RegisterRoutes(routes gin.IRoutes) {
 	routes.GET("/admin", adminPage)
@@ -43,6 +46,7 @@ func RegisterRoutes(routes gin.IRoutes) {
 	routes.GET("/admin/hymatrix", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", hymatrixHTML) })
 	routes.GET("/admin/test", testPage)
 	routes.GET("/admin/assets/common.css", func(c *gin.Context) { c.Data(http.StatusOK, "text/css; charset=utf-8", commonCSS) })
+	routes.GET("/admin/assets/admin-enhancements.css", func(c *gin.Context) { c.Data(http.StatusOK, "text/css; charset=utf-8", adminEnhancementsCSS) })
 	routes.GET("/admin/assets/common.js", func(c *gin.Context) { c.Data(http.StatusOK, "application/javascript; charset=utf-8", commonJS) })
 }
 
