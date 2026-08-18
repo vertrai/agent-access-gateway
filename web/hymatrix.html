@@ -660,8 +660,8 @@
                         >默认使用当前管理页面域名；部署到其他 Gateway
                         时可以修改。</small
                       ></label
-                    ><div class="wide channel-options"><strong>消息渠道</strong><label><input id="enableTelegram" type="checkbox" checked> Telegram</label><label><input id="enableWeixin" type="checkbox"> Weixin</label></div
-                    ><label class="wide"
+                    ><div id="channelOptions" class="wide channel-options" tabindex="-1"><strong>消息渠道</strong><label><input id="enableTelegram" type="checkbox"> Telegram</label><label><input id="enableWeixin" type="checkbox"> Weixin</label></div
+                    ><label id="telegramBotField" class="wide" hidden
                       >Telegram Bot Token 🔒<span class="inline-control"
                         ><input
                           id="botToken"
@@ -1050,6 +1050,10 @@
         const missing = Object.entries(spawnFieldLabels).filter(
           ([id]) => !$(id).value.trim() || !$(id).checkValidity(),
         );
+        if (!$("enableTelegram").checked && !$("enableWeixin").checked)
+          missing.push(["channelOptions", "消息渠道"]);
+        if ($("enableWeixin").checked && !$("weixinBotId").value)
+          missing.push(["weixinBotId", "Weixin Bot"]);
         for (const id of Object.keys(spawnFieldLabels))
           $(id)
             .closest("label")
@@ -1346,8 +1350,15 @@
         }
       });
       $("botToken").addEventListener("change", resolveTelegramBotLink);
-      $("enableWeixin").onchange = () => {$("weixinBotField").hidden = !$("enableWeixin").checked;renderTxPreview()};
-      $("enableTelegram").onchange = renderTxPreview;
+      function syncChannelFields() {
+        $("telegramBotField").hidden = !$("enableTelegram").checked;
+        $("weixinBotField").hidden = !$("enableWeixin").checked;
+        if (!$("enableWeixin").checked && $("weixinAuthDialog").open) closeWeixinAuthorization();
+        renderTxPreview();
+      }
+      $("enableWeixin").onchange = syncChannelFields;
+      $("enableTelegram").onchange = syncChannelFields;
+	  syncChannelFields();
 	      $("userId").onchange = async()=>{++weixinAuthGeneration;await discardWeixinAuthorization();if($("weixinAuthDialog").open)$("weixinAuthDialog").close();await Promise.all([loadKeys(),loadWeixinBots()])};
       $("authorizeWeixin").onclick = startWeixinAuthorization;
       $("retryWeixinAuth").onclick = startWeixinAuthorization;
