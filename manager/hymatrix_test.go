@@ -2,15 +2,51 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+
+	serverSchema "github.com/hymatrix/hymx/server/schema"
+	goarSchema "github.com/permadao/goar/schema"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+type nodeWithoutEncryptionKeySDK struct {
+	encryptCalled bool
+	spawnTags     []goarSchema.Tag
+}
+
+func (s *nodeWithoutEncryptionKeySDK) EncryptTags([]goarSchema.Tag) ([]goarSchema.Tag, error) {
+	s.encryptCalled = true
+	return nil, errors.New("err_invalid_public_key")
+}
+
+func (s *nodeWithoutEncryptionKeySDK) SpawnAndWait(_, _ string, tags []goarSchema.Tag) (*serverSchema.Response, error) {
+	s.spawnTags = tags
+	return &serverSchema.Response{Id: "pid-test"}, nil
+}
+
+func TestSpawnDoesNotRequireNodeEncryptionPublicKey(t *testing.T) {
+	fake := &nodeWithoutEncryptionKeySDK{}
+	client := &HymatrixClient{config: HymatrixConfig{Module: "module", Scheduler: "scheduler", LLMAPIKey: "llm-secret"}, sdk: fake}
+	_, err := client.Spawn(t.Context(), PodSpawnInput{
+		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
+		HermesGatewayToken: "gateway-token", BotToken: "telegram-token",
+		WeixinAccountID: "bot@im.bot", WeixinToken: "weixin-token",
+		WeixinBaseURL: "https://ilinkai.weixin.qq.com", WeixinAllowedUsers: "user@im.wechat",
+	})
+	if err != nil {
+		t.Fatalf("Spawn must work on nodes without Encryption-Public-Key: %v", err)
+	}
+	if fake.encryptCalled {
+		t.Fatal("Spawn unexpectedly called EncryptTags")
+	}
+}
 
 func TestFetchHymatrixNodeInfoUsesInfoEndpoint(t *testing.T) {
 	previous := nodeInfoHTTPClient
@@ -118,30 +154,27 @@ func TestBuildPodSpawnTagsRequiresHermesGatewayToken(t *testing.T) {
 	}
 }
 
-func TestBuildPodSpawnTagSetsSeparatesSecrets(t *testing.T) {
-	plain, secret, err := buildPodSpawnTagSets(HymatrixConfig{LLMAPIKey: "llm-secret"}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret", HermesGatewayToken: "gateway-token", WeixinAccountID: "bot@im.bot", WeixinToken: "weixin-token", WeixinBaseURL: "https://ilinkai.weixin.qq.com", WeixinAllowedUsers: "user@im.wechat"})
+func TestBuildPodSpawnTagsIncludesWeixinWithoutEncryptedPrefix(t *testing.T) {
+	tags, err := buildPodSpawnTags(HymatrixConfig{LLMAPIKey: "llm-secret"}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret", HermesGatewayToken: "gateway-token", WeixinAccountID: "bot@im.bot", WeixinToken: "weixin-token", WeixinBaseURL: "https://ilinkai.weixin.qq.com", WeixinAllowedUsers: "user@im.wechat"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	plainValues, secretValues := map[string]string{}, map[string]string{}
-	for _, tag := range plain {
-		plainValues[tag.Name] = tag.Value
-	}
-	for _, tag := range secret {
-		secretValues[tag.Name] = tag.Value
+	values := map[string]string{}
+	for _, tag := range tags {
+		values[tag.Name] = tag.Value
+		if strings.HasPrefix(tag.Name, "Encrypted-") {
+			t.Fatalf("node without Encryption-Public-Key cannot receive %q", tag.Name)
+		}
 	}
 	for name, want := range map[string]string{"Container-Env-HERMES_AGENT_LLM_API_KEY": "llm-secret", "Container-Env-HUB_GATEWAY_API_KEY": "gateway-secret", "Container-Env-HERMES_GATEWAY_TOKEN": "gateway-token", "Container-Env-HERMES_AGENT_WEIXIN_ACCOUNT_ID": "bot@im.bot", "Container-Env-HERMES_AGENT_WEIXIN_TOKEN": "weixin-token", "Container-Env-HERMES_AGENT_WEIXIN_BASE_URL": "https://ilinkai.weixin.qq.com", "Container-Env-HERMES_AGENT_WEIXIN_ALLOWED_USERS": "user@im.wechat"} {
-		if secretValues[name] != want {
-			t.Errorf("secret tag %s = %q, want %q", name, secretValues[name], want)
-		}
-		if _, leaked := plainValues[name]; leaked {
-			t.Errorf("secret tag %s leaked into plaintext set", name)
+		if values[name] != want {
+			t.Errorf("tag %s = %q, want %q", name, values[name], want)
 		}
 	}
 }
 
-func TestBuildPodSpawnTagSetsRejectsPartialWeixinCredentials(t *testing.T) {
-	_, _, err := buildPodSpawnTagSets(HymatrixConfig{}, PodSpawnInput{
+func TestBuildPodSpawnTagsRejectsPartialWeixinCredentials(t *testing.T) {
+	_, err := buildPodSpawnTags(HymatrixConfig{}, PodSpawnInput{
 		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
 		HermesGatewayToken: "gateway-token", WeixinToken: "partial-token",
 	})

@@ -14,6 +14,7 @@ import (
 
 	"github.com/everFinance/goether"
 	"github.com/hymatrix/hymx/sdk"
+	serverSchema "github.com/hymatrix/hymx/server/schema"
 	"github.com/permadao/goar"
 	goarSchema "github.com/permadao/goar/schema"
 )
@@ -44,7 +45,11 @@ type HymatrixConfig struct {
 
 type HymatrixClient struct {
 	config HymatrixConfig
-	sdk    *sdk.SDK
+	sdk    hymatrixSpawnSDK
+}
+
+type hymatrixSpawnSDK interface {
+	SpawnAndWait(module, scheduler string, params []goarSchema.Tag) (*serverSchema.Response, error)
 }
 
 func NewHymatrixClient(config HymatrixConfig) (*HymatrixClient, error) {
@@ -63,15 +68,10 @@ func NewHymatrixClient(config HymatrixConfig) (*HymatrixClient, error) {
 }
 
 func (h *HymatrixClient) Spawn(_ context.Context, in PodSpawnInput) (string, error) {
-	plainTags, secretTags, err := buildPodSpawnTagSets(h.config, in)
+	tags, err := buildPodSpawnTags(h.config, in)
 	if err != nil {
 		return "", err
 	}
-	encryptedTags, err := h.sdk.EncryptTags(secretTags)
-	if err != nil {
-		return "", fmt.Errorf("encrypt Hymatrix secrets: %w", err)
-	}
-	tags := append(plainTags, encryptedTags...)
 	tags = append(tags, goarSchema.Tag{
 		Name:  "Hub-Spawn-Timestamp",
 		Value: strconv.FormatInt(time.Now().UnixNano(), 10),
