@@ -190,6 +190,7 @@ func TestHymatrixPageSupportsIndependentTelegramAndWeixinChannels(t *testing.T) 
 	for _, expected := range []string{
 		`id="enableTelegram"`, `id="enableWeixin"`, `id="telegramBotField" class="wide" hidden`, `id="weixinBotField" class="wide" hidden`, `id="weixinBotId"`,
 		`function syncChannelFields()`, `$("telegramBotField").hidden = !$("enableTelegram").checked`,
+		`#telegramBotField[hidden]`, `#weixinBotField[hidden]`,
 		`/v1/admin/weixin/bots?userId=`, `enableTelegram: $("enableTelegram").checked`,
 		`weixinBotId: $("enableWeixin").checked`,
 		"Container-Env-HERMES_AGENT_WEIXIN_TOKEN",
