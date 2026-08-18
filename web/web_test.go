@@ -194,6 +194,7 @@ func TestHymatrixPageSupportsIndependentTelegramAndWeixinChannels(t *testing.T) 
 		"Container-Env-HERMES_AGENT_WEIXIN_TOKEN",
 		`id="authorizeWeixin"`, `id="weixinAuthDialog"`, `id="weixinAuthQR"`,
 		`class="weixin-auth-body"`, `class="weixin-qr-stage"`,
+		`.pod-dialog.weixin-auth-dialog`,
 		`/v1/admin/weixin/onboarding`, `function pollWeixinAuthorization`,
 		`$("weixinBotId").value = state.botId`,
 		`error.status === 404 || error.status === 410`,
