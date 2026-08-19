@@ -7,6 +7,7 @@ require (
 	github.com/getsentry/sentry-go v0.44.1
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-co-op/gocron v1.37.0
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/gotd/td v0.143.0
 	github.com/hymatrix/hymx v0.4.9-0.20260513060807-4ce13eab9831
 	github.com/inconshreveable/log15 v2.16.0+incompatible
@@ -15,6 +16,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.4
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
+	rsc.io/qr v0.2.0
 )
 
 require (
@@ -29,7 +31,6 @@ require (
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/consensys/bavard v0.1.22 // indirect
 	github.com/consensys/gnark-crypto v0.14.0 // indirect
-	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
 	github.com/crate-crypto/go-ipa v0.0.0-20240724233137-53bbb0ceb27a // indirect
 	github.com/crate-crypto/go-kzg-4844 v1.1.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
@@ -46,7 +47,6 @@ require (
 	github.com/go-faster/jx v1.2.0 // indirect
 	github.com/go-faster/xor v1.0.0 // indirect
 	github.com/go-faster/yaml v0.4.6 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect
@@ -82,7 +82,6 @@ require (
 	google.golang.org/grpc v1.80.0 // indirect
 	gopkg.in/h2non/gentleman.v2 v2.0.5 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	rsc.io/qr v0.2.0 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
 

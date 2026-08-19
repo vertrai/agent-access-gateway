@@ -11,7 +11,8 @@ import (
 )
 
 func authenticateAdmin(service *Manager, request *http.Request) {
-	token, err := service.adminAuth.issueSession(adminIdentity{Email: "admin@example.com"})
+	service.adminAuth.allowed["admin@example.com"] = struct{}{}
+	token, err := service.adminAuth.issueSession(adminIdentity{Subject: "google-subject", Email: "admin@example.com"})
 	if err != nil {
 		panic(err)
 	}
@@ -124,7 +125,7 @@ func TestAdminFrontendRedirectsToLoginWithoutSession(t *testing.T) {
 
 	login := httptest.NewRecorder()
 	service.router().ServeHTTP(login, httptest.NewRequest(http.MethodGet, "/admin/login", nil))
-	if login.Code != http.StatusOK || !strings.Contains(login.Body.String(), "使用 Google 账号登录") {
+	if login.Code != http.StatusOK || !strings.Contains(login.Body.String(), "Google 账号") {
 		t.Fatalf("status=%d body=%s", login.Code, login.Body.String())
 	}
 }

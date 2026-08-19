@@ -2,87 +2,60 @@ package manager
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
+	"crypto/ed25519"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
-	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
+	"github.com/golang-jwt/jwt/v5"
+	"google.golang.org/api/idtoken"
 )
 
 const adminSessionCookie = "hub_manager_admin_session"
 
-type adminIdentity struct {
-	Email, Name, Picture string
-}
+type adminIdentity struct{ Subject, Email, Name, Picture string }
 
-type adminIdentityProvider interface {
-	AuthorizationURL(state, verifier string) string
-	Exchange(context.Context, string, string) (adminIdentity, error)
+type googleTokenValidator interface {
+	Validate(context.Context, string, string) (adminIdentity, error)
 }
+type googleIDTokenValidator struct{}
 
-type googleAdminIdentityProvider struct {
-	oauth    oauth2.Config
-	verifier *oidc.IDTokenVerifier
-}
-
-func newGoogleAdminIdentityProvider(config AdminGoogleConfig) *googleAdminIdentityProvider {
-	return &googleAdminIdentityProvider{
-		oauth:    oauth2.Config{ClientID: config.ClientID, ClientSecret: config.ClientSecret, RedirectURL: config.RedirectURL, Endpoint: google.Endpoint, Scopes: []string{oidc.ScopeOpenID, "email", "profile"}},
-		verifier: oidc.NewVerifier("https://accounts.google.com", oidc.NewRemoteKeySet(context.Background(), "https://www.googleapis.com/oauth2/v3/certs"), &oidc.Config{ClientID: config.ClientID}),
-	}
-}
-
-func (p *googleAdminIdentityProvider) AuthorizationURL(state, verifier string) string {
-	return p.oauth.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.SetAuthURLParam("prompt", "select_account"))
-}
-
-func (p *googleAdminIdentityProvider) Exchange(ctx context.Context, code, verifier string) (adminIdentity, error) {
-	token, err := p.oauth.Exchange(ctx, code, oauth2.VerifierOption(verifier))
+func (googleIDTokenValidator) Validate(ctx context.Context, raw, audience string) (adminIdentity, error) {
+	payload, err := idtoken.Validate(ctx, raw, audience)
 	if err != nil {
-		return adminIdentity{}, fmt.Errorf("exchange Google authorization code: %w", err)
+		return adminIdentity{}, err
 	}
-	raw, ok := token.Extra("id_token").(string)
-	if !ok {
-		return adminIdentity{}, errors.New("Google response did not include an ID token")
+	email, _ := payload.Claims["email"].(string)
+	verified, _ := payload.Claims["email_verified"].(bool)
+	if payload.Subject == "" || strings.TrimSpace(email) == "" || !verified {
+		return adminIdentity{}, errors.New("Google identity must contain a subject and verified email")
 	}
-	idToken, err := p.verifier.Verify(ctx, raw)
-	if err != nil {
-		return adminIdentity{}, fmt.Errorf("verify Google ID token: %w", err)
-	}
-	var claims struct {
-		Email         string `json:"email"`
-		EmailVerified bool   `json:"email_verified"`
-		Name          string `json:"name"`
-		Picture       string `json:"picture"`
-	}
-	if err := idToken.Claims(&claims); err != nil || !claims.EmailVerified || strings.TrimSpace(claims.Email) == "" {
-		return adminIdentity{}, errors.New("Google identity must contain a verified email")
-	}
-	return adminIdentity{Email: strings.ToLower(strings.TrimSpace(claims.Email)), Name: claims.Name, Picture: claims.Picture}, nil
+	name, _ := payload.Claims["name"].(string)
+	picture, _ := payload.Claims["picture"].(string)
+	return adminIdentity{Subject: payload.Subject, Email: strings.ToLower(strings.TrimSpace(email)), Name: name, Picture: picture}, nil
 }
 
-type adminSession struct {
-	Identity  adminIdentity
-	ExpiresAt int64  `json:"expiresAt"`
-	Nonce     string `json:"nonce"`
+type adminTokenClaims struct {
+	Email   string `json:"email"`
+	Name    string `json:"name,omitempty"`
+	Picture string `json:"picture,omitempty"`
+	jwt.RegisteredClaims
 }
 
 type adminAuthenticator struct {
-	provider adminIdentityProvider
-	allowed  map[string]struct{}
-	secure   bool
-	lifetime time.Duration
-	secret   []byte
+	clientID, issuer, audience string
+	allowed                    map[string]struct{}
+	privateKey                 ed25519.PrivateKey
+	publicKey                  ed25519.PublicKey
+	validator                  googleTokenValidator
+	secure                     bool
+	lifetime                   time.Duration
 }
 
 func newAdminAuthenticator(config AdminGoogleConfig) (*adminAuthenticator, error) {
@@ -92,117 +65,135 @@ func newAdminAuthenticator(config AdminGoogleConfig) (*adminAuthenticator, error
 			allowed[normalized] = struct{}{}
 		}
 	}
-	if config.SessionLifetime <= 0 {
-		config.SessionLifetime = 12 * time.Hour
+	if config.AccessTokenTTL <= 0 {
+		config.AccessTokenTTL = 10 * time.Hour
 	}
-	var provider adminIdentityProvider
-	configured := config.ClientID != "" || config.ClientSecret != "" || config.RedirectURL != "" || len(allowed) > 0 || config.SessionSecret != ""
-	if configured {
-		if config.ClientID == "" || config.ClientSecret == "" || config.RedirectURL == "" || len(allowed) == 0 || len(config.SessionSecret) < 32 {
-			return nil, errors.New("admin Google clientID, clientSecret, redirectURL, 32-character sessionSecret and at least one allowed email are required")
-		}
-		provider = newGoogleAdminIdentityProvider(config)
+	if config.JWTIssuer == "" {
+		config.JWTIssuer = "agent-hub-auth"
 	}
-	return &adminAuthenticator{provider: provider, allowed: allowed, secure: config.CookieSecure, lifetime: config.SessionLifetime, secret: []byte(config.SessionSecret)}, nil
+	if config.JWTAudience == "" {
+		config.JWTAudience = "manager"
+	}
+	configured := config.ClientID != "" || config.PrivateKeyFile != "" || config.PublicKeyFile != "" || len(allowed) > 0
+	auth := &adminAuthenticator{clientID: config.ClientID, issuer: config.JWTIssuer, audience: config.JWTAudience, allowed: allowed, validator: googleIDTokenValidator{}, secure: config.CookieSecure, lifetime: config.AccessTokenTTL}
+	if !configured {
+		return auth, nil
+	}
+	if config.ClientID == "" || config.PrivateKeyFile == "" || config.PublicKeyFile == "" || len(allowed) == 0 {
+		return nil, errors.New("admin Google clientId, allowedEmails, jwt privateKeyFile and publicKeyFile are required")
+	}
+	privateKey, err := loadAdminPrivateKey(config.PrivateKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("load admin JWT private key: %w", err)
+	}
+	publicKey, err := loadAdminPublicKey(config.PublicKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("load admin JWT public key: %w", err)
+	}
+	if !privateKey.Public().(ed25519.PublicKey).Equal(publicKey) {
+		return nil, errors.New("admin JWT private and public keys do not match")
+	}
+	auth.privateKey, auth.publicKey = privateKey, publicKey
+	return auth, nil
+}
+
+func loadAdminPrivateKey(path string) (ed25519.PrivateKey, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, errors.New("private key PEM not found")
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	key, ok := parsed.(ed25519.PrivateKey)
+	if !ok {
+		return nil, errors.New("private key is not ed25519")
+	}
+	return key, nil
+}
+
+func loadAdminPublicKey(path string) (ed25519.PublicKey, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, errors.New("public key PEM not found")
+	}
+	parsed, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	key, ok := parsed.(ed25519.PublicKey)
+	if !ok {
+		return nil, errors.New("public key is not ed25519")
+	}
+	return key, nil
 }
 
 func (a *adminAuthenticator) issueSession(identity adminIdentity) (string, error) {
-	nonce, err := randomAdminToken()
-	if err != nil {
-		return "", err
+	if len(a.privateKey) != ed25519.PrivateKeySize {
+		return "", errors.New("admin JWT signer is not configured")
 	}
-	payload, err := json.Marshal(adminSession{Identity: identity, ExpiresAt: time.Now().Add(a.lifetime).Unix(), Nonce: nonce})
-	if err != nil {
-		return "", err
-	}
-	encoded := base64.RawURLEncoding.EncodeToString(payload)
-	mac := hmac.New(sha256.New, a.secret)
-	_, _ = mac.Write([]byte(encoded))
-	return encoded + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+	now := time.Now()
+	claims := adminTokenClaims{Email: identity.Email, Name: identity.Name, Picture: identity.Picture, RegisteredClaims: jwt.RegisteredClaims{Issuer: a.issuer, Subject: identity.Subject, Audience: jwt.ClaimStrings{a.audience}, IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(a.lifetime))}}
+	return jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims).SignedString(a.privateKey)
 }
 
-func (a *adminAuthenticator) verifySession(token string) (adminIdentity, bool) {
-	encoded, signature, ok := strings.Cut(token, ".")
-	if !ok {
+func (a *adminAuthenticator) verifySession(raw string) (adminIdentity, bool) {
+	claims := &adminTokenClaims{}
+	token, err := jwt.ParseWithClaims(raw, claims, func(token *jwt.Token) (any, error) {
+		if token.Method != jwt.SigningMethodEdDSA {
+			return nil, errors.New("unexpected signing method")
+		}
+		return a.publicKey, nil
+	}, jwt.WithValidMethods([]string{"EdDSA"}), jwt.WithIssuer(a.issuer), jwt.WithAudience(a.audience), jwt.WithExpirationRequired(), jwt.WithIssuedAt(), jwt.WithLeeway(time.Minute))
+	if err != nil || token == nil || !token.Valid || claims.Subject == "" || claims.Email == "" {
 		return adminIdentity{}, false
 	}
-	provided, err := base64.RawURLEncoding.DecodeString(signature)
-	if err != nil {
+	if _, ok := a.allowed[strings.ToLower(claims.Email)]; !ok {
 		return adminIdentity{}, false
 	}
-	mac := hmac.New(sha256.New, a.secret)
-	_, _ = mac.Write([]byte(encoded))
-	if !hmac.Equal(provided, mac.Sum(nil)) {
-		return adminIdentity{}, false
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil {
-		return adminIdentity{}, false
-	}
-	var session adminSession
-	if json.Unmarshal(payload, &session) != nil || session.Identity.Email == "" || time.Now().Unix() >= session.ExpiresAt {
-		return adminIdentity{}, false
-	}
-	return session.Identity, true
+	return adminIdentity{Subject: claims.Subject, Email: claims.Email, Name: claims.Name, Picture: claims.Picture}, true
 }
 
-func randomAdminToken() (string, error) {
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
+func adminCookie(value string, secure bool, maxAge int) *http.Cookie {
+	return &http.Cookie{Name: adminSessionCookie, Value: value, Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge}
+}
+func (m *Manager) adminAuthInfo(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"googleClientId": m.adminAuth.clientID})
+}
+
+func (m *Manager) adminGoogleLogin(c *gin.Context) {
+	var req struct {
+		IDToken string `json:"id_token"`
 	}
-	return base64.RawURLEncoding.EncodeToString(raw), nil
-}
-
-func adminCookie(name, value, path string, secure bool, maxAge int) *http.Cookie {
-	return &http.Cookie{Name: name, Value: value, Path: path, HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge}
-}
-
-func (m *Manager) adminLogin(c *gin.Context) {
-	if m.adminAuth.provider == nil {
-		c.Redirect(http.StatusFound, "/admin/login?error=not_configured")
+	if c.ShouldBindJSON(&req) != nil || strings.TrimSpace(req.IDToken) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id_token is required"})
 		return
 	}
-	state, err := randomAdminToken()
+	identity, err := m.adminAuth.validator.Validate(c.Request.Context(), req.IDToken, m.adminAuth.clientID)
 	if err != nil {
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
-	verifier := oauth2.GenerateVerifier()
-	http.SetCookie(c.Writer, adminCookie("admin_oauth_state", state, "/auth/google/callback", m.adminAuth.secure, 600))
-	http.SetCookie(c.Writer, adminCookie("admin_oauth_verifier", verifier, "/auth/google/callback", m.adminAuth.secure, 600))
-	c.Redirect(http.StatusFound, m.adminAuth.provider.AuthorizationURL(state, verifier))
-}
-
-func (m *Manager) adminCallback(c *gin.Context) {
-	if m.adminAuth.provider == nil {
-		c.Redirect(http.StatusFound, "/admin/login?error=not_configured")
-		return
-	}
-	state, e1 := c.Request.Cookie("admin_oauth_state")
-	verifier, e2 := c.Request.Cookie("admin_oauth_verifier")
-	if e1 != nil || e2 != nil || state.Value == "" || state.Value != c.Query("state") {
-		c.Redirect(http.StatusFound, "/admin/login?error=invalid_state")
-		return
-	}
-	identity, err := m.adminAuth.provider.Exchange(c.Request.Context(), c.Query("code"), verifier.Value)
-	if err != nil {
-		c.Redirect(http.StatusFound, "/admin/login?error=oauth_failed")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid Google id_token"})
 		return
 	}
 	if _, ok := m.adminAuth.allowed[identity.Email]; !ok {
-		c.Redirect(http.StatusFound, "/admin/login?error=not_allowed")
+		c.JSON(http.StatusForbidden, gin.H{"error": "Google account is not an administrator"})
 		return
 	}
 	token, err := m.adminAuth.issueSession(identity)
 	if err != nil {
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot create administrator session"})
 		return
 	}
-	http.SetCookie(c.Writer, adminCookie(adminSessionCookie, token, "/", m.adminAuth.secure, int(m.adminAuth.lifetime.Seconds())))
-	http.SetCookie(c.Writer, adminCookie("admin_oauth_state", "", "/auth/google/callback", m.adminAuth.secure, -1))
-	http.SetCookie(c.Writer, adminCookie("admin_oauth_verifier", "", "/auth/google/callback", m.adminAuth.secure, -1))
-	c.Redirect(http.StatusFound, "/admin")
+	http.SetCookie(c.Writer, adminCookie(token, m.adminAuth.secure, int(m.adminAuth.lifetime.Seconds())))
+	c.JSON(http.StatusOK, gin.H{"user": identity, "redirect": "/admin"})
 }
 
 func (m *Manager) currentAdmin(c *gin.Context) (adminIdentity, bool) {
@@ -212,7 +203,6 @@ func (m *Manager) currentAdmin(c *gin.Context) (adminIdentity, bool) {
 	}
 	return m.adminAuth.verifySession(cookie.Value)
 }
-
 func (m *Manager) requireAdminPage(c *gin.Context) {
 	if _, ok := m.currentAdmin(c); !ok {
 		c.Redirect(http.StatusFound, "/admin/login")
@@ -222,7 +212,6 @@ func (m *Manager) requireAdminPage(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Next()
 }
-
 func (m *Manager) requireAdmin(c *gin.Context) {
 	identity, ok := m.currentAdmin(c)
 	if !ok {
@@ -233,7 +222,6 @@ func (m *Manager) requireAdmin(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Next()
 }
-
 func (m *Manager) adminMe(c *gin.Context) {
 	identity, ok := m.currentAdmin(c)
 	if !ok {
@@ -242,8 +230,7 @@ func (m *Manager) adminMe(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"email": identity.Email, "name": identity.Name, "picture": identity.Picture})
 }
-
 func (m *Manager) adminLogout(c *gin.Context) {
-	http.SetCookie(c.Writer, adminCookie(adminSessionCookie, "", "/", m.adminAuth.secure, -1))
+	http.SetCookie(c.Writer, adminCookie("", m.adminAuth.secure, -1))
 	c.Redirect(http.StatusFound, "/admin/login")
 }

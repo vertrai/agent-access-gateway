@@ -2,6 +2,8 @@ package manager
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"net/http"
 	"sync"
@@ -18,11 +20,12 @@ type Config struct {
 }
 
 type AdminGoogleConfig struct {
-	ClientID, ClientSecret, RedirectURL string
-	AllowedEmails                       []string
-	SessionSecret                       string
-	CookieSecure                        bool
-	SessionLifetime                     time.Duration
+	ClientID                      string
+	AllowedEmails                 []string
+	JWTIssuer, JWTAudience        string
+	PrivateKeyFile, PublicKeyFile string
+	CookieSecure                  bool
+	AccessTokenTTL                time.Duration
 }
 
 type ResourcesConfig struct {
@@ -51,8 +54,15 @@ func New(env string, config Config, wdb *Wdb) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	if env != "test" && auth.provider == nil {
+	if env != "test" && len(auth.publicKey) == 0 {
 		return nil, errors.New("admin Google authentication is required")
+	}
+	if env == "test" && len(auth.publicKey) == 0 {
+		publicKey, privateKey, keyErr := ed25519.GenerateKey(rand.Reader)
+		if keyErr != nil {
+			return nil, keyErr
+		}
+		auth.privateKey, auth.publicKey = privateKey, publicKey
 	}
 	return &Manager{
 		env: env, config: config, wdb: wdb, resources: NewResourcesClient(config.Resources),

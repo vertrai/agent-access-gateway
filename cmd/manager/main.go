@@ -3,7 +3,9 @@ package main
 import (
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/inconshreveable/log15"
@@ -60,8 +62,9 @@ func run(_ *cli.Context) error {
 	}
 	service, err := manager.New(viper.GetString("env"), manager.Config{
 		AdminGoogle: manager.AdminGoogleConfig{
-			ClientID: viper.GetString("admin.google.clientID"), ClientSecret: viper.GetString("admin.google.clientSecret"), RedirectURL: viper.GetString("admin.google.redirectURL"),
-			AllowedEmails: viper.GetStringSlice("admin.google.allowedEmails"), SessionSecret: viper.GetString("admin.google.sessionSecret"), CookieSecure: viper.GetBool("admin.google.cookieSecure"), SessionLifetime: viper.GetDuration("admin.google.sessionLifetime"),
+			ClientID: viper.GetString("auth.google.clientId"), AllowedEmails: viper.GetStringSlice("auth.google.allowedEmails"),
+			JWTIssuer: viper.GetString("auth.jwt.issuer"), JWTAudience: viper.GetString("auth.jwt.audience"), PrivateKeyFile: resolveConfigPath(viper.GetString("auth.jwt.privateKeyFile")), PublicKeyFile: resolveConfigPath(viper.GetString("auth.jwt.publicKeyFile")),
+			CookieSecure: viper.GetBool("auth.jwt.cookieSecure"), AccessTokenTTL: time.Duration(viper.GetInt("auth.jwt.accessTokenTTLMinutes")) * time.Minute,
 		},
 		Resources: manager.ResourcesConfig{
 			BaseURL:     viper.GetString("resources.baseURL"),
@@ -78,4 +81,19 @@ func run(_ *cli.Context) error {
 	<-signals
 	service.Close()
 	return nil
+}
+
+func resolveConfigPath(value string) string {
+	if value == "" || filepath.IsAbs(value) {
+		return value
+	}
+	configFile := viper.ConfigFileUsed()
+	if configFile == "" {
+		return value
+	}
+	resolved, err := filepath.Abs(filepath.Join(filepath.Dir(configFile), value))
+	if err != nil {
+		return filepath.Join(filepath.Dir(configFile), value)
+	}
+	return resolved
 }
