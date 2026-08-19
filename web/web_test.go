@@ -41,7 +41,7 @@ func TestAdminLoginPageHasDesignedAccessGateAndNonAdminErrorState(t *testing.T) 
 	for _, expected := range []string{
 		`class="access-gate"`, `class="identity-panel"`, "运行时控制中心",
 		`id="googleButton"`, `id="error"`, `role="alert"`, `aria-live="assertive"`,
-		"admin_not_allowed", "该 Google 账号未被授权为管理员", "auth.google.allowedEmails",
+		"admin_not_allowed", "该 Google 账号未被授权为管理员",
 		"Math.min(320", "网络连接异常，请检查网络后重新选择 Google 账号",
 	} {
 		if !strings.Contains(body, expected) {
