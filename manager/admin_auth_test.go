@@ -49,6 +49,9 @@ func TestAdminGoogleLoginRejectsEmailOutsideAllowlist(t *testing.T) {
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
+	if !strings.Contains(recorder.Body.String(), `"code":"admin_not_allowed"`) || !strings.Contains(recorder.Body.String(), "未被授权为管理员") {
+		t.Fatalf("missing non-admin error response: %s", recorder.Body.String())
+	}
 }
 
 func TestAdminGoogleConfigurationMustBeComplete(t *testing.T) {

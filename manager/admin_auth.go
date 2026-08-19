@@ -184,7 +184,7 @@ func (m *Manager) adminGoogleLogin(c *gin.Context) {
 		return
 	}
 	if _, ok := m.adminAuth.allowed[identity.Email]; !ok {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Google account is not an administrator"})
+		c.JSON(http.StatusForbidden, gin.H{"code": "admin_not_allowed", "error": "该 Google 账号未被授权为管理员"})
 		return
 	}
 	token, err := m.adminAuth.issueSession(identity)

@@ -28,6 +28,28 @@ func TestRegisterRoutes(t *testing.T) {
 	}
 }
 
+func TestAdminLoginPageHasDesignedAccessGateAndNonAdminErrorState(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterRoutes(router, allowAll)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/login", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+	body := recorder.Body.String()
+	for _, expected := range []string{
+		`class="access-gate"`, `class="identity-panel"`, "运行时控制中心",
+		`id="googleButton"`, `id="error"`, `role="alert"`, `aria-live="assertive"`,
+		"admin_not_allowed", "该 Google 账号未被授权为管理员", "auth.google.allowedEmails",
+		"Math.min(320", "网络连接异常，请检查网络后重新选择 Google 账号",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("login page is missing %q", expected)
+		}
+	}
+}
+
 func TestAdminPagesShareRuntimeHubBrandAndNavigation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
