@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -12,8 +13,16 @@ import (
 var log = common.NewLog("manager")
 
 type Config struct {
-	AdminAPIKey string
+	AdminGoogle AdminGoogleConfig
 	Resources   ResourcesConfig
+}
+
+type AdminGoogleConfig struct {
+	ClientID, ClientSecret, RedirectURL string
+	AllowedEmails                       []string
+	SessionSecret                       string
+	CookieSecure                        bool
+	SessionLifetime                     time.Duration
 }
 
 type ResourcesConfig struct {
@@ -31,17 +40,26 @@ type Manager struct {
 	weixinAttempts map[string]weixinAttempt
 	weixinBaseURL  string
 	weixinClient   *http.Client
+	adminAuth      *adminAuthenticator
 }
 
 func New(env string, config Config, wdb *Wdb) (*Manager, error) {
 	if config.Resources.Timeout <= 0 {
 		config.Resources.Timeout = 30 * time.Second
 	}
+	auth, err := newAdminAuthenticator(config.AdminGoogle)
+	if err != nil {
+		return nil, err
+	}
+	if env != "test" && auth.provider == nil {
+		return nil, errors.New("admin Google authentication is required")
+	}
 	return &Manager{
 		env: env, config: config, wdb: wdb, resources: NewResourcesClient(config.Resources),
 		weixinAttempts: make(map[string]weixinAttempt),
 		weixinBaseURL:  "https://ilinkai.weixin.qq.com",
 		weixinClient:   &http.Client{Timeout: 15 * time.Second},
+		adminAuth:      auth,
 	}, nil
 }
 

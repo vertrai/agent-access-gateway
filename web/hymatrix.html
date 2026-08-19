@@ -608,12 +608,6 @@
               会随容器自启动。
             </p>
           </div>
-          <label class="admin-key"
-            >Manager Admin API Key<input
-              id="adminKey"
-              type="password"
-              placeholder="所有管理页面共用"
-          /></label>
         </header>
         <section class="pod-layout">
           <div class="pod-compose">
@@ -838,7 +832,7 @@
               </div>
             </div>
             <div id="pods">
-              <div class="empty">输入 Manager Admin API Key 后刷新。</div>
+              <div class="empty">正在加载 Pods…</div>
             </div>
             <div id="podPagination" class="pod-pagination" hidden></div>
           </article>
@@ -882,7 +876,6 @@
       $("name").value = randomPodName();
       $("gatewayUrl").value = window.location.origin;
       $("hermesGatewayToken").value = randomHex();
-      initAdminKey();
       let revealTxSecrets = false;
       let spawnSubmitting = false;
 	      let telegramLinkRequest = 0;
@@ -1027,7 +1020,6 @@
       function isSpawnFormComplete() {
         const requiredIDs = Object.keys(spawnFieldLabels);
         return (
-          currentManagerAdminKey() !== "" &&
           requiredIDs.every((id) => $(id).value.trim() !== "") &&
           $("form").checkValidity() &&
           ($("enableTelegram").checked || $("enableWeixin").checked) &&
@@ -1068,10 +1060,8 @@
         const container = $("spawnRequirements");
         container.classList.toggle(
           "complete",
-          missing.length === 0 && currentManagerAdminKey() !== "",
+          missing.length === 0,
         );
-        if (currentManagerAdminKey() === "")
-          missing.unshift(["adminKey", "Manager Admin API Key"]);
         if (!missing.length) {
           container.textContent = "✓ 配置完整，可以发送 Spawn 交易";
           return;
@@ -1400,17 +1390,9 @@
           setBusy($("acquireBot"), false);
         }
       };
-      document.addEventListener("manager-admin-key-change", () => {
-        loadFormOptions();
-        load();
-        renderTxPreview();
-        resolveScheduler().catch((error) =>
-          showStatus($("status"), error.message),
-        );
-      });
       loadFormOptions();
       resolveScheduler().catch(() => {});
-      if (currentManagerAdminKey()) load();
+      load();
       renderTxPreview();
       function formatPodTime(value) {
         if (!value) return "—";

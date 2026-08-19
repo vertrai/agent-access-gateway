@@ -9,10 +9,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func allowAll(c *gin.Context) { c.Next() }
+
 func TestRegisterRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router, allowAll)
 	for _, path := range []string{"/admin", "/admin/users", "/admin/google", "/admin/browser", "/admin/telegram", "/admin/weixin", "/admin/hymatrix", "/admin/test"} {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, path, nil)
@@ -29,7 +31,7 @@ func TestRegisterRoutes(t *testing.T) {
 func TestAdminPagesShareRuntimeHubBrandAndNavigation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router, allowAll)
 	for _, path := range []string{"/admin", "/admin/users", "/admin/google", "/admin/browser", "/admin/telegram", "/admin/weixin", "/admin/hymatrix", "/admin/test"} {
 		recorder := httptest.NewRecorder()
 		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
@@ -45,7 +47,7 @@ func TestAdminPagesShareRuntimeHubBrandAndNavigation(t *testing.T) {
 func TestWeixinPageIsStandaloneLocalHermesTest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router, allowAll)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/weixin", nil))
 	for _, expected := range []string{"Weixin Bot 授权", "一次性分配给 Hermes Pod", `id="userId"`, "WEIXIN_ACCOUNT_ID", "/v1/admin/weixin/onboarding", "复制 .env"} {
@@ -58,7 +60,7 @@ func TestWeixinPageIsStandaloneLocalHermesTest(t *testing.T) {
 func TestWeixinPageRevealsAndFocusesEnvironmentAfterScan(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router, allowAll)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/weixin", nil))
 	body := recorder.Body.String()
@@ -72,22 +74,22 @@ func TestWeixinPageRevealsAndFocusesEnvironmentAfterScan(t *testing.T) {
 	}
 }
 
-func TestAdminPagesAutoLoadWithStoredManagerKey(t *testing.T) {
+func TestAdminPagesAutoLoadWithGoogleSession(t *testing.T) {
 	for path, expected := range map[string]string{
-		"/admin":          "if(currentManagerAdminKey())load()",
-		"/admin/users":    "if (currentManagerAdminKey()) load();",
-		"/admin/google":   "if(currentManagerAdminKey())load()",
-		"/admin/browser":  "if(currentManagerAdminKey())loadBrowserResources()",
+		"/admin":          "load();",
+		"/admin/users":    "load();",
+		"/admin/google":   "load();",
+		"/admin/browser":  "loadBrowserResources();",
 		"/admin/telegram": "loadTelegramResources()",
-		"/admin/hymatrix": "if (currentManagerAdminKey()) load()",
+		"/admin/hymatrix": "load();",
 	} {
 		gin.SetMode(gin.TestMode)
 		router := gin.New()
-		RegisterRoutes(router)
+		RegisterRoutes(router, allowAll)
 		recorder := httptest.NewRecorder()
 		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
 		if !strings.Contains(recorder.Body.String(), expected) {
-			t.Errorf("GET %s does not auto-load data with a stored Manager key", path)
+			t.Errorf("GET %s does not auto-load data with an authenticated session", path)
 		}
 	}
 }
@@ -95,7 +97,7 @@ func TestAdminPagesAutoLoadWithStoredManagerKey(t *testing.T) {
 func TestBrowserResourcePageExplainsOnDemandInventory(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router, allowAll)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/browser", nil))
 	body := recorder.Body.String()
@@ -118,7 +120,7 @@ func TestBrowserResourcePageExplainsOnDemandInventory(t *testing.T) {
 func TestUsersPageExplainsExistingAndNewUserIssuance(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router, allowAll)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/users", nil))
 	body := recorder.Body.String()
@@ -152,7 +154,7 @@ func TestUsersPageExplainsExistingAndNewUserIssuance(t *testing.T) {
 func TestResourceAPITestUsesAdminShell(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router, allowAll)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/test", nil))
 	body := recorder.Body.String()
@@ -169,7 +171,7 @@ func TestResourceAPITestUsesAdminShell(t *testing.T) {
 func TestHymatrixPageIncludesLiveTransactionPreview(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router, allowAll)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/hymatrix", nil))
 	body := recorder.Body.String()
@@ -183,7 +185,7 @@ func TestHymatrixPageIncludesLiveTransactionPreview(t *testing.T) {
 func TestHymatrixPageSupportsIndependentTelegramAndWeixinChannels(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router, allowAll)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/hymatrix", nil))
 	body := recorder.Body.String()
@@ -211,7 +213,7 @@ func TestHymatrixPageSupportsIndependentTelegramAndWeixinChannels(t *testing.T) 
 func TestHymatrixSpawnRequiresCompleteForm(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router, allowAll)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/hymatrix", nil))
 	body := recorder.Body.String()
@@ -236,7 +238,7 @@ func TestHymatrixSpawnRequiresCompleteForm(t *testing.T) {
 func TestHymatrixPodHistorySupportsFilteringAndDetails(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router, allowAll)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/hymatrix", nil))
 	body := recorder.Body.String()
@@ -258,7 +260,7 @@ func TestHymatrixPodHistorySupportsFilteringAndDetails(t *testing.T) {
 func TestAdminEnhancementsAssetIncludesMobileNavigationStyles(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router, allowAll)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/assets/admin-enhancements.css", nil))
 	if recorder.Code != http.StatusOK {

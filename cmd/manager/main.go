@@ -59,7 +59,10 @@ func run(_ *cli.Context) error {
 		return err
 	}
 	service, err := manager.New(viper.GetString("env"), manager.Config{
-		AdminAPIKey: viper.GetString("admin.apiKey"),
+		AdminGoogle: manager.AdminGoogleConfig{
+			ClientID: viper.GetString("admin.google.clientID"), ClientSecret: viper.GetString("admin.google.clientSecret"), RedirectURL: viper.GetString("admin.google.redirectURL"),
+			AllowedEmails: viper.GetStringSlice("admin.google.allowedEmails"), SessionSecret: viper.GetString("admin.google.sessionSecret"), CookieSecure: viper.GetBool("admin.google.cookieSecure"), SessionLifetime: viper.GetDuration("admin.google.sessionLifetime"),
+		},
 		Resources: manager.ResourcesConfig{
 			BaseURL:     viper.GetString("resources.baseURL"),
 			AdminAPIKey: viper.GetString("resources.adminAPIKey"),

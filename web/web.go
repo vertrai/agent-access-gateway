@@ -13,6 +13,9 @@ import (
 //go:embed admin.html
 var adminHTML []byte
 
+//go:embed login.html
+var loginHTML []byte
+
 //go:embed test.html
 var testHTML []byte
 
@@ -44,15 +47,17 @@ var commonJS []byte
 var adminEnhancementsCSS []byte
 
 // RegisterRoutes mounts the shared administration frontend on a backend.
-func RegisterRoutes(routes gin.IRoutes) {
-	routes.GET("/admin", adminPage)
-	routes.GET("/admin/users", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", usersHTML) })
-	routes.GET("/admin/google", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", googleHTML) })
-	routes.GET("/admin/browser", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", browserHTML) })
-	routes.GET("/admin/telegram", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", telegramHTML) })
-	routes.GET("/admin/weixin", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", weixinHTML) })
-	routes.GET("/admin/hymatrix", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", hymatrixHTML) })
-	routes.GET("/admin/test", testPage)
+func RegisterRoutes(routes *gin.Engine, authentication gin.HandlerFunc) {
+	routes.GET("/admin/login", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", loginHTML) })
+	protected := routes.Group("", authentication)
+	protected.GET("/admin", adminPage)
+	protected.GET("/admin/users", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", usersHTML) })
+	protected.GET("/admin/google", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", googleHTML) })
+	protected.GET("/admin/browser", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", browserHTML) })
+	protected.GET("/admin/telegram", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", telegramHTML) })
+	protected.GET("/admin/weixin", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", weixinHTML) })
+	protected.GET("/admin/hymatrix", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", hymatrixHTML) })
+	protected.GET("/admin/test", testPage)
 	routes.GET("/admin/assets/common.css", func(c *gin.Context) { c.Data(http.StatusOK, "text/css; charset=utf-8", commonCSS) })
 	routes.GET("/admin/assets/admin-enhancements.css", func(c *gin.Context) { c.Data(http.StatusOK, "text/css; charset=utf-8", adminEnhancementsCSS) })
 	routes.GET("/admin/assets/common.js", func(c *gin.Context) { c.Data(http.StatusOK, "application/javascript; charset=utf-8", commonJS) })

@@ -20,7 +20,7 @@ func TestWeixinOnboardingDoesNotExposePollSecret(t *testing.T) {
 		_, _ = w.Write([]byte(`{"qrcode":"secret-poll-token","qrcode_img_content":"https://weixin.qq.com/x/scan"}`))
 	}))
 	defer provider.Close()
-	m, err := New("test", Config{AdminAPIKey: "admin", Resources: ResourcesConfig{Timeout: time.Second}}, nil)
+	m, err := New("test", Config{Resources: ResourcesConfig{Timeout: time.Second}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestWeixinOnboardingDoesNotExposePollSecret(t *testing.T) {
 	m.weixinClient = provider.Client()
 	req := httptest.NewRequest(http.MethodPost, "/v1/admin/weixin/onboarding", bytes.NewBufferString(`{"userId":"user-a"}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer admin")
+	authenticateAdmin(m, req)
 	res := httptest.NewRecorder()
 	m.router().ServeHTTP(res, req)
 	if res.Code != http.StatusCreated {
@@ -52,13 +52,13 @@ func TestAllowedWeixinURLRejectsUntrustedHost(t *testing.T) {
 }
 
 func TestConfirmedWeixinCredentialsReturnHermesEnvironment(t *testing.T) {
-	m, err := New("test", Config{AdminAPIKey: "admin"}, nil)
+	m, err := New("test", Config{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	m.weixinAttempts["attempt"] = weixinAttempt{Credentials: &WeixinCredentials{AccountID: "bot@im.bot", Token: "secret-token", BaseURL: "https://ilinkai.weixin.qq.com", UserID: "wx-user"}, CredentialExpiresAt: time.Now().Add(time.Hour)}
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/weixin/onboarding/attempt/credentials", nil)
-	req.Header.Set("Authorization", "Bearer admin")
+	authenticateAdmin(m, req)
 	res := httptest.NewRecorder()
 	m.router().ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -75,13 +75,13 @@ func TestConfirmedWeixinCredentialsReturnHermesEnvironment(t *testing.T) {
 }
 
 func TestConnectedWeixinPollReturnsStoredBotIDWithoutToken(t *testing.T) {
-	m, err := New("test", Config{AdminAPIKey: "admin"}, nil)
+	m, err := New("test", Config{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	m.weixinAttempts["attempt"] = weixinAttempt{Credentials: &WeixinCredentials{BotID: "wxb_test", AccountID: "bot@im.bot", Token: "secret-token", BaseURL: "https://ilinkai.weixin.qq.com", UserID: "wx-user"}, CredentialExpiresAt: time.Now().Add(time.Hour)}
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/weixin/onboarding/attempt", nil)
-	req.Header.Set("Authorization", "Bearer admin")
+	authenticateAdmin(m, req)
 	res := httptest.NewRecorder()
 	m.router().ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -104,7 +104,7 @@ func TestCancelledInFlightWeixinPollCannotConfirmAttempt(t *testing.T) {
 		_, _ = w.Write([]byte(`{"status":"confirmed","ilink_bot_id":"bot@im.bot","bot_token":"secret-token","baseurl":"https://ilinkai.weixin.qq.com","ilink_user_id":"wx-user"}`))
 	}))
 	defer provider.Close()
-	m, err := New("test", Config{AdminAPIKey: "admin"}, nil)
+	m, err := New("test", Config{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,14 +113,14 @@ func TestCancelledInFlightWeixinPollCannotConfirmAttempt(t *testing.T) {
 	pollResponse := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
 		req := httptest.NewRequest(http.MethodGet, "/v1/admin/weixin/onboarding/attempt", nil)
-		req.Header.Set("Authorization", "Bearer admin")
+		authenticateAdmin(m, req)
 		res := httptest.NewRecorder()
 		m.router().ServeHTTP(res, req)
 		pollResponse <- res
 	}()
 	<-started
 	cancelReq := httptest.NewRequest(http.MethodDelete, "/v1/admin/weixin/onboarding/attempt", nil)
-	cancelReq.Header.Set("Authorization", "Bearer admin")
+	authenticateAdmin(m, cancelReq)
 	cancelRes := httptest.NewRecorder()
 	m.router().ServeHTTP(cancelRes, cancelReq)
 	if cancelRes.Code != http.StatusNoContent {
@@ -140,13 +140,13 @@ func TestCancelledInFlightWeixinPollCannotConfirmAttempt(t *testing.T) {
 }
 
 func TestConfirmedWeixinCredentialsRejectDotenvInjection(t *testing.T) {
-	m, err := New("test", Config{AdminAPIKey: "admin"}, nil)
+	m, err := New("test", Config{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	m.weixinAttempts["attempt"] = weixinAttempt{Credentials: &WeixinCredentials{AccountID: "bot@im.bot", Token: "secret\nINJECTED=yes", BaseURL: "https://ilinkai.weixin.qq.com", UserID: "wx-user"}, CredentialExpiresAt: time.Now().Add(time.Hour)}
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/weixin/onboarding/attempt/credentials", nil)
-	req.Header.Set("Authorization", "Bearer admin")
+	authenticateAdmin(m, req)
 	res := httptest.NewRecorder()
 	m.router().ServeHTTP(res, req)
 	if res.Code != http.StatusBadGateway {

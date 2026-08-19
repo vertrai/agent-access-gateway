@@ -5,7 +5,15 @@ ginMode: debug
 postgres:
   dsn: postgresql://postgres@127.0.0.1:5432/hub_manager?sslmode=disable
 admin:
-  apiKey: replace-with-manager-admin-api-key
+  google:
+    clientID: CHANGE_ME.apps.googleusercontent.com
+    clientSecret: CHANGE_ME
+    redirectURL: http://127.0.0.1:8086/auth/google/callback
+    allowedEmails:
+      - admin@example.com
+    sessionSecret: CHANGE_ME_AT_LEAST_32_RANDOM_CHARACTERS
+    cookieSecure: false # 生产 HTTPS 环境请设为 true
+    sessionLifetime: 12h
 resources:
   baseURL: http://127.0.0.1:8085
   adminAPIKey: must-match-resouces-admin-api-key

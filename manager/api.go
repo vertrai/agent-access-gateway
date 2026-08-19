@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,7 +20,11 @@ func (m *Manager) router() *gin.Engine {
 	r := gin.New()
 	r.Use(common.RequestLogger(log), gin.Recovery(), common.CORSMiddleware())
 	r.GET("/info", m.info)
-	gatewayweb.RegisterRoutes(r)
+	gatewayweb.RegisterRoutes(r, m.requireAdminPage)
+	r.GET("/auth/google/login", m.adminLogin)
+	r.GET("/auth/google/callback", m.adminCallback)
+	r.GET("/v1/admin/session", m.adminMe)
+	r.POST("/v1/admin/logout", m.adminLogout)
 	admin := r.Group("/v1/admin", m.requireAdmin)
 	admin.POST("/users", m.createUserAccessKey)
 	admin.GET("/users", m.listUsers)
@@ -69,17 +72,6 @@ func (m *Manager) runAPI(endpoint string) {
 func (m *Manager) info(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"service": "manager", "status": "ok", "resourcesConfigured": m.resources.configured()})
 }
-func (m *Manager) requireAdmin(c *gin.Context) {
-	got := strings.TrimSpace(strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer "))
-	if got == "" {
-		got = c.GetHeader("X-Admin-API-Key")
-	}
-	want := m.config.AdminAPIKey
-	if want == "" || len(got) != len(want) || subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "valid manager admin api key is required"})
-	}
-}
-
 func (m *Manager) proxyResource(path string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body any
