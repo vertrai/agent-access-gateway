@@ -197,7 +197,7 @@ func TestHymatrixPageIncludesLiveTransactionPreview(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/hymatrix", nil))
 	body := recorder.Body.String()
-	for _, expected := range []string{"待发送 Spawn 交易", "Envelope", "Protocol tags", "Container environment", "Hub-Spawn-Timestamp", "显示敏感值", "复制预览", "telegramBotLink", "telegramAcquireHint", "当前 API Key 未开通 Telegram 资源", "/v1/admin/telegram/bot-link", "01 · Pod 基础配置", "02 · Node 配置", "http://52.220.233.136:8081", "Y4U_9tWd56KL0SmzNYNcypLA1uOHsw24cRtPOEB1kQs", "randomPodName", "advanced-config"} {
+	for _, expected := range []string{"待发送 Spawn 交易", "Envelope", "Protocol tags", "Container environment", "Hub-Spawn-Timestamp", "显示敏感值", "复制预览", "telegramBotLink", "telegramAcquireHint", "当前 API Key 未开通 Telegram 资源", "/v1/admin/telegram/bot-link", "01 · Pod 基础配置", "02 · Node 配置", "http://52.220.233.136:8081", "1LYYgkP4nRmnvGi2EN9ERuyYyFDzUMkSFBYW4_2DuyI", "randomPodName", "advanced-config"} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("Hymatrix page is missing %q", expected)
 		}
@@ -222,6 +222,11 @@ func TestHymatrixPageBuildsSpawnAndStartAgentSeparately(t *testing.T) {
 		`"Encrypted-Container-Env-HUB_GATEWAY_API_KEY"`,
 		`"Encrypted-Container-Env-HERMES_AGENT_TELEGRAM_BOT_TOKEN"`,
 		`"Encrypted-Container-Env-HERMES_AGENT_WEIXIN_TOKEN"`,
+		`class="pod-dialog start-agent-dialog"`,
+		`class="pod-actions"`,
+		`id="spawnKeyCheck"`,
+		`spawnUserKeyState === "available"`,
+		`没有可用 API Key`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("Hymatrix split transaction UI is missing %q", expected)

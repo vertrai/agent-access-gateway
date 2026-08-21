@@ -404,6 +404,9 @@
         padding: 6px 9px;
         font-size: 12px;
       }
+      .pod-actions {display:flex;align-items:center;justify-content:flex-end;gap:7px;white-space:nowrap}
+      .pod-action {min-width:58px;min-height:34px;padding:7px 11px !important}
+      .pod-action-start:before {content:"\25B6";margin-right:6px;font-size:9px}
       .pod-table table {
         min-width: 900px;
         table-layout: fixed;
@@ -415,20 +418,21 @@
         width: 8%;
       }
       .pod-table th:nth-child(3) {
-        width: 23%;
+        width: 19%;
       }
       .pod-table th:nth-child(4) {
         width: 12%;
       }
       .pod-table th:nth-child(5) {
-        width: 20%;
+        width: 17%;
       }
       .pod-table th:nth-child(6) {
-        width: 12%;
+        width: 11%;
       }
       .pod-table th:nth-child(7) {
         width: 7%;
       }
+      .pod-table th:nth-child(8) {width:13%}
       .pod-table td {
         overflow-wrap: anywhere;
         vertical-align: top;
@@ -522,6 +526,35 @@
         margin: 0;
         font-size: 13px;
       }
+      .spawn-key-check {min-height:18px;font-size:11px;font-weight:650}
+      .spawn-key-check.checking {color:var(--muted)}
+      .spawn-key-check.available {color:var(--green)}
+      .spawn-key-check.unavailable {color:var(--red)}
+      .spawn-key-check a {color:inherit}
+      .start-agent-dialog {width:min(960px,calc(100vw - 40px));height:min(760px,calc(100dvh - 40px));max-width:none;max-height:none;margin:auto;overflow:hidden;border-radius:20px}
+      .start-agent-dialog[open] {display:grid;grid-template-rows:auto minmax(0,1fr)}
+      .start-agent-dialog .pod-dialog-head {align-items:center;padding:18px 24px 16px;background:linear-gradient(135deg,#f6fbfe,#fff 62%)}
+      .start-agent-dialog .pod-dialog-head h2 {margin-top:4px;font-size:22px}
+      .dialog-close {width:38px;height:38px;padding:0;border-radius:50%}
+      .start-agent-form {display:grid;grid-template-rows:minmax(0,1fr) auto;min-height:0;overflow:hidden}
+      .start-agent-workspace {display:grid;grid-template-columns:minmax(0,1.4fr) minmax(280px,.6fr);min-height:0;overflow:hidden}
+      .start-agent-fields {display:grid;align-content:start;gap:16px;min-height:0;padding:20px 24px 24px;overflow:auto;scrollbar-gutter:stable}
+      .start-section {margin:0;padding:0;border:0}
+      .start-section + .start-section {padding-top:18px;border-top:1px solid var(--line)}
+      .start-section legend {width:100%;padding:0 0 12px;color:var(--ink);font-size:15px;font-weight:750}
+      .start-section legend span {display:block;margin-top:4px;color:var(--muted);font-size:11px;font-weight:550}
+      .start-agent-fields input,.start-agent-fields select {min-height:44px}
+      .start-agent-fields .channel-options {align-items:center;padding:11px 14px}
+      .start-agent-fields .channel-options input {width:18px;height:18px;min-height:0;accent-color:var(--blue)}
+      .start-preview {display:grid;grid-template-rows:auto minmax(0,1fr);min-height:0;border-left:1px solid var(--line);background:#f7f9fc}
+      .start-preview-head {padding:17px 18px 13px;border-bottom:1px solid var(--line)}
+      .start-preview-head h3 {margin-bottom:4px}
+      .start-preview .tx-body {min-height:0;max-height:none;padding-bottom:12px;overflow:auto}
+      .start-preview .tx-row {padding:8px 16px 9px}
+      .start-preview .tx-section {padding:10px 16px 7px}
+      .start-agent-footer {display:flex;align-items:center;justify-content:space-between;gap:18px;min-height:68px;padding:12px 24px;border-top:1px solid var(--line);background:#fff;box-shadow:0 -8px 24px rgba(28,52,84,.05)}
+      .start-agent-footer .actions {margin-left:auto}
+      .start-agent-footer button[type="submit"] {min-width:168px}
       @media (max-width: 1160px) {
         .pod-compose {
           grid-template-columns: 1fr;
@@ -532,6 +565,14 @@
         .tx-body {
           max-height: 560px;
         }
+      }
+      @media (max-width: 760px) {
+        .start-agent-dialog {width:calc(100vw - 16px);height:calc(100dvh - 16px)}
+        .start-agent-workspace {grid-template-columns:1fr;overflow:auto}
+        .start-agent-fields {overflow:visible;padding:18px}
+        .start-preview {border-left:0;border-top:1px solid var(--line);min-height:320px}
+        .start-agent-footer {align-items:stretch;flex-direction:column;padding:14px 18px}
+        .start-agent-footer .actions,.start-agent-footer button[type="submit"] {width:100%;margin:0}
       }
       @media (max-width: 520px) {
         .form-grid,
@@ -628,7 +669,7 @@
                     <label
                       >选择用户<select id="userId" required>
                         <option value="">加载用户中…</option>
-                      </select></label
+                      </select><small id="spawnKeyCheck" class="spawn-key-check">选择后将检查可用 API Key</small></label
                     ><label>Pod 名称<input id="name" required /></label
                     ><label
                       >Runtime Type<input
@@ -660,7 +701,7 @@
                       >Module<input
                         id="module"
                         required
-                        value="Y4U_9tWd56KL0SmzNYNcypLA1uOHsw24cRtPOEB1kQs"
+                        value="1LYYgkP4nRmnvGi2EN9ERuyYyFDzUMkSFBYW4_2DuyI"
                     /></label>
                     <details class="advanced-config wide">
                       <summary>高级配置 · 交易签名私钥</summary>
@@ -756,24 +797,25 @@
       </div>
       <div id="podDetailBody" class="pod-detail-body"></div>
     </dialog>
-    <dialog id="startAgentDialog" class="pod-dialog">
-      <div class="pod-dialog-head"><div><span class="eyebrow">START-AGENT</span><h2 id="startAgentTitle">启动 Agent</h2></div><button id="closeStartAgent" type="button" class="secondary">关闭</button></div>
-      <form id="startAgentForm">
+    <dialog id="startAgentDialog" class="pod-dialog start-agent-dialog">
+      <div class="pod-dialog-head"><div><span class="eyebrow">START-AGENT · RUNTIME CONFIG</span><h2 id="startAgentTitle">启动 Agent</h2></div><button id="closeStartAgent" type="button" class="secondary dialog-close" aria-label="关闭">×</button></div>
+      <form id="startAgentForm" class="start-agent-form">
         <input id="startPodId" type="hidden" />
-        <fieldset><legend>Gateway 与消息渠道</legend><div class="form-grid">
-          <label>可用 Gateway API Key<select id="accessKeyId" required disabled><option value="">加载中…</option></select><small id="noAccessKey" class="no-access-key" hidden>当前用户没有可用 Key，<a id="createAccessKeyLink" href="/admin/users">前往创建</a></small></label>
+        <div class="start-agent-workspace"><div class="start-agent-fields">
+        <fieldset class="start-section"><legend>连接与消息渠道<span>选择 Agent 使用的 Gateway 身份与对话入口</span></legend><div class="form-grid">
+          <label class="wide">可用 Gateway API Key<select id="accessKeyId" required disabled><option value="">加载中…</option></select><small id="noAccessKey" class="no-access-key" hidden>当前用户没有可用 Key，<a id="createAccessKeyLink" href="/admin/users">前往创建</a></small></label>
           <label class="wide">Hub Gateway URL<input id="gatewayUrl" type="url" required /></label>
           <div id="channelOptions" class="wide channel-options" tabindex="-1"><strong>消息渠道</strong><label><input id="enableTelegram" type="checkbox"> Telegram</label><label><input id="enableWeixin" type="checkbox"> Weixin</label></div>
           <label id="telegramBotField" class="wide" hidden>Telegram Bot Token 🔒<span class="inline-control"><input id="botToken" type="password" placeholder="可手动填写，或从 Resources 领取" /><button id="acquireBot" type="button" class="secondary">从 Resources 领取</button></span><small id="telegramBotLink" class="bot-link" hidden><span>Bot 链接</span><a id="telegramBotAnchor" target="_blank" rel="noopener noreferrer"></a></small><small id="telegramAcquireHint" class="bot-link error" hidden></small></label>
           <label id="weixinBotField" class="wide" hidden>Weixin Bot<span class="inline-control"><select id="weixinBotId"><option value="">加载中…</option></select><button id="authorizeWeixin" type="button" class="secondary">扫码授权</button></span></label>
           <label class="wide">Hermes API Server Key 🔒<span class="inline-control"><input id="hermesGatewayToken" type="password" required /><button id="generateHermesKey" type="button" class="secondary">重新生成</button></span></label>
         </div></fieldset>
-        <fieldset><legend>LLM 运行配置</legend><div class="form-grid">
+        <fieldset class="start-section"><legend>模型配置<span>设置 Hermes Agent 的推理服务</span></legend><div class="form-grid">
           <label>Provider<input id="llmProvider" required value="custom" /></label><label>Model<input id="llmModel" required value="deepseek-chat" /></label>
           <label class="wide">Base URL<input id="llmBaseUrl" type="url" required value="https://api.deepseek.com" /></label><label class="wide">LLM API Key 🔒<input id="llmApiKey" type="password" required placeholder="sk-..." /></label>
-        </div></fieldset>
-        <div id="startAgentPreview" class="tx-body"></div>
-        <div class="actions"><button id="sendStartAgent" type="submit">发送 Start-Agent 交易</button><span id="startAgentStatus" class="status"></span></div>
+        </div></fieldset></div>
+        <aside class="start-preview"><div class="start-preview-head"><h3>启动摘要</h3><p>敏感值已隐藏，发送前请确认目标与运行参数。</p></div><div id="startAgentPreview" class="tx-body"></div></aside></div>
+        <div class="start-agent-footer"><span id="startAgentStatus" class="status"></span><div class="actions"><button id="cancelStartAgent" type="button" class="secondary">取消</button><button id="sendStartAgent" type="submit">启动 Agent</button></div></div>
       </form>
     </dialog>
     <dialog id="weixinAuthDialog" class="pod-dialog weixin-auth-dialog">
@@ -807,6 +849,7 @@
       let spawnSubmitting = false;
       let telegramLinkRequest = 0;
       let accessKeysRequest = 0;
+      let spawnUserKeyState = "idle";
       let weixinBotsRequest = 0;
       let weixinAuthAttempt = "";
       let weixinAuthTimer = 0;
@@ -881,7 +924,7 @@
         return `<div class="tx-row${sensitive ? " sensitive" : ""}${!value ? " pending" : ""}"><span class="tx-key">${esc(key)}</span><span class="tx-value">${esc(sensitive && !revealTxSecrets ? masked(value) : value || "<not set>")}</span></div>`;
       }
       function isSpawnFormComplete() {
-        return Object.keys(spawnFieldLabels).every((id) => $(id).value.trim() !== "") && $("form").checkValidity();
+        return spawnUserKeyState === "available" && Object.keys(spawnFieldLabels).every((id) => $(id).value.trim() !== "") && $("form").checkValidity();
       }
       const spawnFieldLabels = {
         userId: "用户",
@@ -906,10 +949,14 @@
         const container = $("spawnRequirements");
         container.classList.toggle(
           "complete",
-          missing.length === 0,
+          missing.length === 0 && spawnUserKeyState === "available",
         );
-        if (!missing.length) {
+        if (!missing.length && spawnUserKeyState === "available") {
           container.textContent = "✓ 配置完整，可以发送 Spawn 交易";
+          return;
+        }
+        if (!missing.length) {
+          container.textContent = spawnUserKeyState === "checking" ? "正在检查该用户的可用 API Key…" : "所选用户需要至少一把可用 API Key 才能创建 Pod";
           return;
         }
         container.innerHTML = `<strong>还需完成 ${missing.length} 项：</strong>${missing.map(([id, label]) => `<button type="button" data-missing-field="${id}">${label}</button>`).join("")}`;
@@ -1003,6 +1050,7 @@
       async function loadKeys() {
         const userId = $("userId").value;
         const requestID = ++accessKeysRequest;
+        const keyCheck = $("spawnKeyCheck");
         $("createAccessKeyLink").href = userId
           ? `/admin/users?userId=${encodeURIComponent(userId)}`
           : "/admin/users";
@@ -1010,10 +1058,17 @@
         $("accessKeyId").disabled = true;
         $("accessKeyId").innerHTML = '<option value="">加载中…</option>';
         if (!userId) {
+          spawnUserKeyState = "idle";
+          keyCheck.className = "spawn-key-check";
+          keyCheck.textContent = "选择后将检查可用 API Key";
           $("accessKeyId").innerHTML = '<option value="">请先选择用户</option>';
           renderTxPreview();
           return;
         }
+        spawnUserKeyState = "checking";
+        keyCheck.className = "spawn-key-check checking";
+        keyCheck.textContent = "正在检查可用 API Key…";
+        renderTxPreview();
         try {
           const d = await adminRequest(
             `/v1/admin/users/${encodeURIComponent(userId)}/access-keys/available`,
@@ -1029,6 +1084,11 @@
               .join("");
           $("accessKeyId").disabled = d.items.length === 0;
           $("noAccessKey").hidden = d.items.length !== 0;
+          spawnUserKeyState = d.items.length ? "available" : "unavailable";
+          keyCheck.className = `spawn-key-check ${spawnUserKeyState}`;
+          keyCheck.innerHTML = d.items.length
+            ? `✓ 有 ${d.items.length} 把可用 API Key`
+            : `没有可用 API Key，<a href="/admin/users?userId=${encodeURIComponent(userId)}">前往创建</a>`;
           if (!d.items.length)
             $("accessKeyId").innerHTML =
               '<option value="">该用户没有未使用的 API Key</option>';
@@ -1036,6 +1096,9 @@
           if (requestID !== accessKeysRequest || $("userId").value !== userId) return;
           $("accessKeyId").innerHTML =
             `<option value="">${esc(e.message)}</option>`;
+          spawnUserKeyState = "unavailable";
+          keyCheck.className = "spawn-key-check unavailable";
+          keyCheck.textContent = "API Key 检查失败，请重试";
         }
         renderTxPreview();
       }
@@ -1280,13 +1343,13 @@
         const rows = visible
           .map(
             (p) =>
-              `<tr><td><b>${esc(p.name)}</b><br><small>${esc(p.userId)}</small></td><td>${esc(p.runtimeType)}</td><td>${esc(p.module)}<br><small>${esc(p.scheduler)}</small></td><td>${esc(p.llmProvider || "—")} / ${esc(p.llmModel || "—")}</td><td>${esc(p.pid || "—")}</td><td>${esc(formatPodTime(p.createdAt))}</td><td>${pill(p.status)}</td><td>${p.status === "spawned" ? `<button type="button" data-pod-start="${esc(p.id)}">Start</button>` : ""}<button type="button" class="secondary" data-pod-detail="${esc(p.id)}">详情</button></td></tr>`,
+              `<tr><td><b>${esc(p.name)}</b><br><small>${esc(p.userId)}</small></td><td>${esc(p.runtimeType)}</td><td>${esc(p.module)}<br><small>${esc(p.scheduler)}</small></td><td>${esc(p.llmProvider || "—")} / ${esc(p.llmModel || "—")}</td><td>${esc(p.pid || "—")}</td><td>${esc(formatPodTime(p.createdAt))}</td><td>${pill(p.status)}</td><td><div class="pod-actions">${p.status === "spawned" ? `<button type="button" class="pod-action pod-action-start" data-pod-start="${esc(p.id)}">启动</button>` : ""}<button type="button" class="secondary pod-action" data-pod-detail="${esc(p.id)}">详情</button></div></td></tr>`,
           )
           .join("");
         const cards = visible
           .map(
             (p) =>
-              `<article class="pod-card"><div class="pod-card-head"><div><b>${esc(p.name)}</b><br><small>${esc(p.userId)}</small></div>${pill(p.status)}</div><dl><dt>Runtime</dt><dd>${esc(p.runtimeType)}</dd><dt>LLM</dt><dd>${esc(p.llmProvider || "—")} / ${esc(p.llmModel || "—")}</dd><dt>PID</dt><dd>${esc(p.pid || "—")}</dd><dt>创建时间</dt><dd>${esc(formatPodTime(p.createdAt))}</dd></dl><div class="pod-card-foot"><small>${p.error ? "有失败信息可查看" : "交易配置已隐藏敏感值"}</small>${p.status === "spawned" ? `<button type="button" data-pod-start="${esc(p.id)}">Start</button>` : ""}<button type="button" class="secondary" data-pod-detail="${esc(p.id)}">查看详情</button></div></article>`,
+              `<article class="pod-card"><div class="pod-card-head"><div><b>${esc(p.name)}</b><br><small>${esc(p.userId)}</small></div>${pill(p.status)}</div><dl><dt>Runtime</dt><dd>${esc(p.runtimeType)}</dd><dt>LLM</dt><dd>${esc(p.llmProvider || "—")} / ${esc(p.llmModel || "—")}</dd><dt>PID</dt><dd>${esc(p.pid || "—")}</dd><dt>创建时间</dt><dd>${esc(formatPodTime(p.createdAt))}</dd></dl><div class="pod-card-foot"><small>${p.error ? "有失败信息可查看" : "交易配置已隐藏敏感值"}</small><div class="pod-actions">${p.status === "spawned" ? `<button type="button" class="pod-action pod-action-start" data-pod-start="${esc(p.id)}">启动</button>` : ""}<button type="button" class="secondary pod-action" data-pod-detail="${esc(p.id)}">详情</button></div></div></article>`,
           )
           .join("");
         $("pods").innerHTML = `<div class="table-wrap pod-table"><table><thead><tr><th>Pod / 用户</th><th>Runtime</th><th>Module / Scheduler</th><th>LLM</th><th>PID</th><th>创建时间</th><th>状态</th><th></th></tr></thead><tbody>${rows}</tbody></table></div><div class="pod-cards">${cards}</div>`;
@@ -1311,9 +1374,9 @@
         $("enableTelegram").checked = false;
         $("enableWeixin").checked = false;
         syncChannelFields();
-        await Promise.all([loadKeys(), loadWeixinBots()]);
         renderStartAgentPreview(pod);
         $("startAgentDialog").showModal();
+        await Promise.all([loadKeys(), loadWeixinBots()]);
       }
       function renderStartAgentPreview(pod) {
         if (!pod) pod = allPods.find((item) => item.id === $("startPodId").value);
@@ -1367,6 +1430,7 @@
       };
       $("closePodDetail").onclick = () => $("podDetail").close();
       $("closeStartAgent").onclick = () => $("startAgentDialog").close();
+      $("cancelStartAgent").onclick = () => $("startAgentDialog").close();
       $("startAgentForm").addEventListener("input", () => renderStartAgentPreview());
       $("startAgentForm").addEventListener("change", () => renderStartAgentPreview());
       $("startAgentForm").onsubmit = async (event) => {
@@ -1389,7 +1453,7 @@
           })});
           showStatus($("startAgentStatus"), "Start-Agent 交易已完成", true);
           $("startAgentDialog").close();
-          await load();
+          await Promise.all([load(), loadKeys()]);
         } catch (error) {
           showStatus($("startAgentStatus"), error.message);
         } finally {
