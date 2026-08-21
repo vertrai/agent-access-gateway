@@ -40,6 +40,9 @@ func TestWeixinOnboardingDoesNotExposePollSecret(t *testing.T) {
 	if !strings.Contains(res.Body.String(), "data:image/png;base64,") {
 		t.Fatalf("QR image missing: %s", res.Body.String())
 	}
+	if !strings.Contains(res.Body.String(), `"expireTime":90`) || !strings.Contains(res.Body.String(), `"expiresAt":`) {
+		t.Fatalf("QR expiry metadata missing: %s", res.Body.String())
+	}
 }
 
 func TestAllowedWeixinURLRejectsUntrustedHost(t *testing.T) {

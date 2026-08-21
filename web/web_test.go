@@ -255,6 +255,11 @@ func TestHymatrixPageSupportsIndependentTelegramAndWeixinChannels(t *testing.T) 
 		`$("weixinBotId").value = state.botId`,
 		`error.status === 404 || error.status === 410`,
 		`$("weixinBotId").value !== state.botId`,
+		`id="weixinAuthExpiry"`,
+		`function startWeixinExpiryCountdown`,
+		`预计剩余`,
+		`$("weixinAuthDialog").close()`,
+		`授权成功，正在返回启动配置`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("Hymatrix channel selection is missing %q", expected)

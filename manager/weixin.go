@@ -17,7 +17,10 @@ import (
 	"rsc.io/qr"
 )
 
-const weixinAttemptLifetime = 10 * time.Minute
+const (
+	weixinAttemptLifetime         = 10 * time.Minute
+	weixinQRCodeEstimatedLifetime = 90 * time.Second
+)
 
 type WeixinCredentials struct {
 	BotID     string
@@ -54,8 +57,9 @@ func (m *Manager) startWeixinOnboarding(c *gin.Context) {
 		}
 	}
 	var payload struct {
-		QRCode string `json:"qrcode"`
-		Image  string `json:"qrcode_img_content"`
+		QRCode     string `json:"qrcode"`
+		Image      string `json:"qrcode_img_content"`
+		ExpireTime int    `json:"expire_time"`
 	}
 	if err := m.weixinGET(c.Request.Context(), m.weixinBaseURL+"/ilink/bot/get_bot_qrcode?bot_type=3", &payload); err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
@@ -88,7 +92,11 @@ func (m *Manager) startWeixinOnboarding(c *gin.Context) {
 	}
 	m.weixinAttempts[attempt.ID] = attempt
 	m.weixinMu.Unlock()
-	c.JSON(http.StatusCreated, gin.H{"attemptId": attempt.ID, "qrImage": qrDataURL, "expiresAt": attempt.ExpiresAt, "intervalSeconds": 2})
+	qrLifetime := weixinQRCodeEstimatedLifetime
+	if payload.ExpireTime > 0 && time.Duration(payload.ExpireTime)*time.Second <= weixinAttemptLifetime {
+		qrLifetime = time.Duration(payload.ExpireTime) * time.Second
+	}
+	c.JSON(http.StatusCreated, gin.H{"attemptId": attempt.ID, "qrImage": qrDataURL, "expiresAt": time.Now().UTC().Add(qrLifetime), "expireTime": int(qrLifetime.Seconds()), "intervalSeconds": 2})
 }
 
 func (m *Manager) pollWeixinOnboarding(c *gin.Context) {

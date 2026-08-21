@@ -121,6 +121,7 @@
         background: #edf8f4;
         font-size: 12px;
       }
+      .weixin-expiry {min-height:18px;color:var(--muted);font:650 11px/1.4 ui-monospace,monospace}
       #weixinAuthStatus.error {
         background: #fff2f0;
       }
@@ -824,6 +825,7 @@
         <p class="weixin-auth-copy">打开微信扫一扫，并在手机端确认授权</p>
         <div class="weixin-qr-stage"><img id="weixinAuthQR" alt="微信扫码授权二维码" hidden></div>
         <p id="weixinAuthStatus" class="status">正在申请二维码…</p>
+        <p id="weixinAuthExpiry" class="weixin-expiry"></p>
         <div class="actions"><button id="retryWeixinAuth" type="button" class="secondary" hidden>重新申请</button></div>
       </div>
     </dialog>
@@ -853,6 +855,7 @@
       let weixinBotsRequest = 0;
       let weixinAuthAttempt = "";
       let weixinAuthTimer = 0;
+      let weixinExpiryTimer = 0;
       let weixinAuthGeneration = 0;
       let allPods = [];
       let podPage = 1;
@@ -1129,9 +1132,25 @@
       }
       async function discardWeixinAuthorization() {
         clearTimeout(weixinAuthTimer);
+        clearInterval(weixinExpiryTimer);
         const attempt = weixinAuthAttempt;
         weixinAuthAttempt = "";
         if (attempt) await adminRequest(`/v1/admin/weixin/onboarding/${encodeURIComponent(attempt)}`, {method: "DELETE"}).catch(() => {});
+      }
+      function startWeixinExpiryCountdown(expiresAt) {
+        clearInterval(weixinExpiryTimer);
+        const deadline = new Date(expiresAt).getTime();
+        const render = () => {
+          const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+          $("weixinAuthExpiry").textContent = remaining > 0 ? `预计剩余 ${remaining} 秒 · 实际状态以微信为准` : "预计有效期已到，正在确认二维码状态…";
+          if (!remaining) clearInterval(weixinExpiryTimer);
+        };
+        if (!Number.isFinite(deadline)) {
+          $("weixinAuthExpiry").textContent = "有效期以微信返回状态为准";
+          return;
+        }
+        render();
+        weixinExpiryTimer = setInterval(render, 1000);
       }
       async function startWeixinAuthorization() {
         const userId = $("userId").value;
@@ -1143,6 +1162,7 @@
         const generation = weixinAuthGeneration;
         await discardWeixinAuthorization();
         $("weixinAuthQR").hidden = true;
+        $("weixinAuthExpiry").textContent = "";
         $("retryWeixinAuth").hidden = true;
         showStatus($("weixinAuthStatus"), "正在申请二维码…", true);
         if (!$("weixinAuthDialog").open) $("weixinAuthDialog").showModal();
@@ -1156,6 +1176,7 @@
           weixinAuthAttempt = result.attemptId;
           $("weixinAuthQR").src = result.qrImage;
           $("weixinAuthQR").hidden = false;
+          startWeixinExpiryCountdown(result.expiresAt);
           showStatus($("weixinAuthStatus"), "等待扫码确认…", true);
           pollWeixinAuthorization(generation, userId, Math.max(2, Number(result.intervalSeconds) || 2));
         } catch (error) {
@@ -1165,6 +1186,14 @@
           if (generation === weixinAuthGeneration) setBusy($("authorizeWeixin"), false);
         }
       }
+      function showExpiredWeixinAuthorization() {
+        clearInterval(weixinExpiryTimer);
+        weixinAuthAttempt = "";
+        $("weixinAuthQR").hidden = true;
+        $("weixinAuthExpiry").textContent = "二维码已失效";
+        $("retryWeixinAuth").hidden = false;
+        showStatus($("weixinAuthStatus"), "二维码已过期，请点击重新申请。", false);
+      }
       async function pollWeixinAuthorization(generation, userId, seconds) {
         if (!weixinAuthAttempt || generation !== weixinAuthGeneration) return;
         try {
@@ -1173,6 +1202,8 @@
           if (state.state === "connected") {
             const attempt = weixinAuthAttempt;
             weixinAuthAttempt = "";
+            clearInterval(weixinExpiryTimer);
+            $("weixinAuthExpiry").textContent = "授权已确认";
             const loaded = await loadWeixinBots();
             if (generation !== weixinAuthGeneration || $("userId").value !== userId) return;
             $("weixinBotId").value = state.botId;
@@ -1184,25 +1215,24 @@
               await adminRequest(`/v1/admin/weixin/onboarding/${encodeURIComponent(attempt)}`, {method: "DELETE"}).catch(() => {});
               return;
             }
-            showStatus($("weixinAuthStatus"), "授权成功，已自动选择 Weixin Bot。", true);
+            showStatus($("weixinAuthStatus"), "授权成功，正在返回启动配置…", true);
             showStatus($("status"), "Weixin Bot 授权成功并已选择", true);
             await adminRequest(`/v1/admin/weixin/onboarding/${encodeURIComponent(attempt)}`, {method: "DELETE"}).catch(() => {});
+            weixinAuthTimer = setTimeout(() => {
+              if (generation !== weixinAuthGeneration || !$("weixinAuthDialog").open) return;
+              $("weixinAuthDialog").close();
+              $("weixinBotId").focus();
+            }, 650);
             return;
           }
           if (state.state === "expired") {
-            weixinAuthAttempt = "";
-            $("weixinAuthQR").hidden = true;
-            $("retryWeixinAuth").hidden = false;
-            showStatus($("weixinAuthStatus"), "二维码已过期，请重新申请。");
+            showExpiredWeixinAuthorization();
             return;
           }
           showStatus($("weixinAuthStatus"), state.state === "scanned" ? "已扫码，请在微信中确认…" : "等待扫码确认…", true);
         } catch (error) {
           if (error.status === 404 || error.status === 410) {
-            weixinAuthAttempt = "";
-            $("weixinAuthQR").hidden = true;
-            $("retryWeixinAuth").hidden = false;
-            showStatus($("weixinAuthStatus"), "二维码已过期，请重新申请。");
+            showExpiredWeixinAuthorization();
             return;
           }
           if (error.status === 409) {
@@ -1261,8 +1291,8 @@
         if ($("weixinAuthDialog").open) $("weixinAuthDialog").close();
         await Promise.all([loadKeys(), loadWeixinBots()]);
       };
-      $("authorizeWeixin").onclick = startWeixinAuthorization;
-      $("retryWeixinAuth").onclick = startWeixinAuthorization;
+      $("authorizeWeixin").onclick = () => startWeixinAuthorization();
+      $("retryWeixinAuth").onclick = () => startWeixinAuthorization();
       $("closeWeixinAuth").onclick = closeWeixinAuthorization;
       $("weixinAuthDialog").addEventListener("cancel", (event) => {event.preventDefault();closeWeixinAuthorization()});
       $("acquireBot").onclick = async () => {
