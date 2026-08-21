@@ -204,6 +204,30 @@ func TestHymatrixPageIncludesLiveTransactionPreview(t *testing.T) {
 	}
 }
 
+func TestHymatrixPagePreviewsSpawnThenEncryptedStartAgentTransactions(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterRoutes(router, allowAll)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/hymatrix", nil))
+	body := recorder.Body.String()
+	for _, expected := range []string{
+		"01 · Spawn transaction",
+		"02 · Start-Agent transaction",
+		"Spawn 成功返回 PID 后发送",
+		`["Container-Env-RUNTIME_TYPE", $("runtimeType").value.trim(), false]`,
+		`["Action", "Start-Agent", false]`,
+		`"Encrypted-Container-Env-HERMES_AGENT_LLM_API_KEY"`,
+		`"Encrypted-Container-Env-HUB_GATEWAY_API_KEY"`,
+		`"Encrypted-Container-Env-HERMES_AGENT_TELEGRAM_BOT_TOKEN"`,
+		`"Encrypted-Container-Env-HERMES_AGENT_WEIXIN_TOKEN"`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("Hymatrix transaction sequence preview is missing %q", expected)
+		}
+	}
+}
+
 func TestHymatrixPageSupportsIndependentTelegramAndWeixinChannels(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

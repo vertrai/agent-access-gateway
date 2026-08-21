@@ -386,6 +386,10 @@ func (m *Manager) spawnPod(c *gin.Context) {
 		})
 	}
 	if err != nil {
+		if pid != "" {
+			pod.PID = pid
+			pod.BotToken = botToken
+		}
 		pod.Status = schema.PodStatusFailed
 		pod.Error = err.Error()
 	} else {
@@ -397,7 +401,7 @@ func (m *Manager) spawnPod(c *gin.Context) {
 		if err := tx.Save(&pod).Error; err != nil {
 			return err
 		}
-		if err != nil {
+		if err != nil && pid == "" {
 			if releaseErr := tx.Model(&schema.AccessKey{}).Where("id = ? AND assigned_pod_id = ?", accessKey.ID, pod.ID).Updates(map[string]any{"status": "available", "assigned_pod_id": nil}).Error; releaseErr != nil {
 				return releaseErr
 			}

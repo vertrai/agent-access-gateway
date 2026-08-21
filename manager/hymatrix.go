@@ -50,6 +50,7 @@ type HymatrixClient struct {
 
 type hymatrixSpawnSDK interface {
 	SpawnAndWait(module, scheduler string, params []goarSchema.Tag) (*serverSchema.Response, error)
+	SendMessageWithEncryptedParamsAndWait(target, data string, params, encryptedParams []goarSchema.Tag) (*serverSchema.Response, error)
 }
 
 func NewHymatrixClient(config HymatrixConfig) (*HymatrixClient, error) {
@@ -72,6 +73,10 @@ func (h *HymatrixClient) Spawn(_ context.Context, in PodSpawnInput) (string, err
 	if err != nil {
 		return "", err
 	}
+	startPlain, startSecret, err := buildStartAgentTagSets(h.config, in)
+	if err != nil {
+		return "", err
+	}
 	tags = append(tags, goarSchema.Tag{
 		Name:  "Hub-Spawn-Timestamp",
 		Value: strconv.FormatInt(time.Now().UnixNano(), 10),
@@ -80,18 +85,22 @@ func (h *HymatrixClient) Spawn(_ context.Context, in PodSpawnInput) (string, err
 	if err != nil {
 		return "", err
 	}
+	if _, err := h.sdk.SendMessageWithEncryptedParamsAndWait(res.Id, "", startPlain, startSecret); err != nil {
+		return res.Id, fmt.Errorf("start Hermes agent: %w", err)
+	}
 	return res.Id, nil
 }
 
 func buildPodSpawnTags(config HymatrixConfig, in PodSpawnInput) ([]goarSchema.Tag, error) {
-	plain, secret, err := buildPodSpawnTagSets(config, in)
-	return append(plain, secret...), err
+	_ = config
+	runtimeType := strings.TrimSpace(in.RuntimeType)
+	if runtimeType == "" {
+		return nil, fmt.Errorf("runtimeType is required")
+	}
+	return []goarSchema.Tag{{Name: containerEnvTagPrefix + "RUNTIME_TYPE", Value: runtimeType}}, nil
 }
 
-func buildPodSpawnTagSets(config HymatrixConfig, in PodSpawnInput) ([]goarSchema.Tag, []goarSchema.Tag, error) {
-	if strings.TrimSpace(in.RuntimeType) == "" {
-		return nil, nil, fmt.Errorf("runtimeType is required")
-	}
+func buildStartAgentTagSets(config HymatrixConfig, in PodSpawnInput) ([]goarSchema.Tag, []goarSchema.Tag, error) {
 	if strings.TrimSpace(in.GatewayURL) == "" || strings.TrimSpace(in.GatewayAPIKey) == "" {
 		return nil, nil, fmt.Errorf("gateway URL and API key are required")
 	}
@@ -113,7 +122,6 @@ func buildPodSpawnTagSets(config HymatrixConfig, in PodSpawnInput) ([]goarSchema
 		provider = "custom"
 	}
 	plainValues := [][2]string{
-		{"RUNTIME_TYPE", in.RuntimeType},
 		{"HERMES_AGENT_LLM_PROVIDER", provider},
 		{"HERMES_AGENT_LLM_MODEL", config.LLMModel},
 		{"HERMES_AGENT_LLM_BASE_URL", config.LLMBaseURL},
@@ -143,7 +151,8 @@ func buildPodSpawnTagSets(config HymatrixConfig, in PodSpawnInput) ([]goarSchema
 		}
 		return tags
 	}
-	return toTags(plainValues), toTags(secretValues), nil
+	plain := append([]goarSchema.Tag{{Name: "Action", Value: "Start-Agent"}}, toTags(plainValues)...)
+	return plain, toTags(secretValues), nil
 }
 
 type PodSpawnInput struct {

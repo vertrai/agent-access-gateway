@@ -31,7 +31,146 @@ func (s *nodeWithoutEncryptionKeySDK) SpawnAndWait(_, _ string, tags []goarSchem
 	return &serverSchema.Response{Id: "pid-test"}, nil
 }
 
-func TestSpawnDoesNotRequireNodeEncryptionPublicKey(t *testing.T) {
+func (s *nodeWithoutEncryptionKeySDK) SendMessageWithEncryptedParamsAndWait(_ string, _ string, _, _ []goarSchema.Tag) (*serverSchema.Response, error) {
+	return nil, errors.New("err_invalid_public_key")
+}
+
+type recordingPodSDK struct {
+	calls          []string
+	spawnTags      []goarSchema.Tag
+	spawnErr       error
+	startTarget    string
+	startPlain     []goarSchema.Tag
+	startEncrypted []goarSchema.Tag
+	startErr       error
+}
+
+func (s *recordingPodSDK) SpawnAndWait(_, _ string, tags []goarSchema.Tag) (*serverSchema.Response, error) {
+	s.calls = append(s.calls, "spawn")
+	s.spawnTags = tags
+	if s.spawnErr != nil {
+		return nil, s.spawnErr
+	}
+	return &serverSchema.Response{Id: "pid-new"}, nil
+}
+
+func (s *recordingPodSDK) SendMessageWithEncryptedParamsAndWait(target, _ string, plain, encrypted []goarSchema.Tag) (*serverSchema.Response, error) {
+	s.calls = append(s.calls, "start-agent")
+	s.startTarget = target
+	s.startPlain = plain
+	s.startEncrypted = encrypted
+	if s.startErr != nil {
+		return nil, s.startErr
+	}
+	return &serverSchema.Response{Id: "message-start"}, nil
+}
+
+func TestSpawnWaitsThenSendsEncryptedStartAgent(t *testing.T) {
+	fake := &recordingPodSDK{}
+	client := &HymatrixClient{config: HymatrixConfig{
+		Module: "module", Scheduler: "scheduler", LLMProvider: "custom",
+		LLMModel: "model", LLMBaseURL: "https://llm.example/v1", LLMAPIKey: "llm-secret",
+	}, sdk: fake}
+
+	pid, err := client.Spawn(t.Context(), PodSpawnInput{
+		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
+		HermesGatewayToken: "hermes-secret", BotToken: "telegram-secret",
+		WeixinAccountID: "bot@im.bot", WeixinToken: "weixin-secret",
+		WeixinBaseURL: "https://ilinkai.weixin.qq.com", WeixinAllowedUsers: "user@im.wechat",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pid != "pid-new" {
+		t.Fatalf("pid = %q", pid)
+	}
+	if strings.Join(fake.calls, ",") != "spawn,start-agent" {
+		t.Fatalf("calls = %v", fake.calls)
+	}
+	if fake.startTarget != pid {
+		t.Fatalf("start target = %q, want %q", fake.startTarget, pid)
+	}
+	spawnValues := tagsByName(fake.spawnTags)
+	if spawnValues["Container-Env-RUNTIME_TYPE"] != "hermes" || spawnValues["Hub-Spawn-Timestamp"] == "" || len(spawnValues) != 2 {
+		t.Fatalf("spawn tags = %v", spawnValues)
+	}
+	assertTagsEqual(t, fake.startPlain, map[string]string{
+		"Action": "Start-Agent",
+		"Container-Env-HERMES_AGENT_LLM_PROVIDER": "custom",
+		"Container-Env-HERMES_AGENT_LLM_MODEL":    "model",
+		"Container-Env-HERMES_AGENT_LLM_BASE_URL": "https://llm.example/v1",
+		"Container-Env-HUB_GATEWAY_URL":           "https://hub.example",
+		"Container-Env-API_SERVER_ENABLED":        "true",
+	})
+	assertTagsEqual(t, fake.startEncrypted, map[string]string{
+		"Container-Env-HERMES_AGENT_LLM_API_KEY":          "llm-secret",
+		"Container-Env-HUB_GATEWAY_API_KEY":               "gateway-secret",
+		"Container-Env-API_SERVER_KEY":                    "hermes-secret",
+		"Container-Env-HERMES_GATEWAY_TOKEN":              "hermes-secret",
+		"Container-Env-HERMES_AGENT_TELEGRAM_BOT_TOKEN":   "telegram-secret",
+		"Container-Env-HERMES_AGENT_WEIXIN_ACCOUNT_ID":    "bot@im.bot",
+		"Container-Env-HERMES_AGENT_WEIXIN_TOKEN":         "weixin-secret",
+		"Container-Env-HERMES_AGENT_WEIXIN_BASE_URL":      "https://ilinkai.weixin.qq.com",
+		"Container-Env-HERMES_AGENT_WEIXIN_ALLOWED_USERS": "user@im.wechat",
+	})
+}
+
+func TestSpawnFailureDoesNotSendStartAgent(t *testing.T) {
+	fake := &recordingPodSDK{spawnErr: errors.New("spawn rejected")}
+	client := &HymatrixClient{config: HymatrixConfig{Module: "module", Scheduler: "scheduler"}, sdk: fake}
+
+	_, err := client.Spawn(t.Context(), PodSpawnInput{
+		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
+		HermesGatewayToken: "hermes-secret",
+	})
+	if err == nil || !strings.Contains(err.Error(), "spawn rejected") {
+		t.Fatalf("error = %v", err)
+	}
+	if strings.Join(fake.calls, ",") != "spawn" {
+		t.Fatalf("calls = %v", fake.calls)
+	}
+}
+
+func TestStartAgentFailureReturnsSpawnedPID(t *testing.T) {
+	fake := &recordingPodSDK{startErr: errors.New("message rejected")}
+	client := &HymatrixClient{config: HymatrixConfig{Module: "module", Scheduler: "scheduler"}, sdk: fake}
+
+	pid, err := client.Spawn(t.Context(), PodSpawnInput{
+		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
+		HermesGatewayToken: "hermes-secret",
+	})
+	if err == nil || !strings.Contains(err.Error(), "start Hermes agent: message rejected") {
+		t.Fatalf("error = %v", err)
+	}
+	if pid != "pid-new" {
+		t.Fatalf("pid = %q, want spawned PID", pid)
+	}
+	if strings.Join(fake.calls, ",") != "spawn,start-agent" {
+		t.Fatalf("calls = %v", fake.calls)
+	}
+}
+
+func assertTagsEqual(t *testing.T, tags []goarSchema.Tag, want map[string]string) {
+	t.Helper()
+	if len(tags) != len(want) {
+		t.Fatalf("tag count = %d, want %d: %#v", len(tags), len(want), tags)
+	}
+	for _, tag := range tags {
+		if value, ok := want[tag.Name]; !ok || value != tag.Value {
+			t.Fatalf("unexpected tag %q=%q; want %v", tag.Name, tag.Value, want)
+		}
+	}
+}
+
+func tagsByName(tags []goarSchema.Tag) map[string]string {
+	values := make(map[string]string, len(tags))
+	for _, tag := range tags {
+		values[tag.Name] = tag.Value
+	}
+	return values
+}
+
+func TestSpawnRequiresNodeEncryptionPublicKeyForStartAgent(t *testing.T) {
 	fake := &nodeWithoutEncryptionKeySDK{}
 	client := &HymatrixClient{config: HymatrixConfig{Module: "module", Scheduler: "scheduler", LLMAPIKey: "llm-secret"}, sdk: fake}
 	_, err := client.Spawn(t.Context(), PodSpawnInput{
@@ -40,11 +179,8 @@ func TestSpawnDoesNotRequireNodeEncryptionPublicKey(t *testing.T) {
 		WeixinAccountID: "bot@im.bot", WeixinToken: "weixin-token",
 		WeixinBaseURL: "https://ilinkai.weixin.qq.com", WeixinAllowedUsers: "user@im.wechat",
 	})
-	if err != nil {
-		t.Fatalf("Spawn must work on nodes without Encryption-Public-Key: %v", err)
-	}
-	if fake.encryptCalled {
-		t.Fatal("Spawn unexpectedly called EncryptTags")
+	if err == nil || !strings.Contains(err.Error(), "err_invalid_public_key") {
+		t.Fatalf("error = %v", err)
 	}
 }
 
@@ -82,14 +218,14 @@ func TestFetchHymatrixNodeInfoRejectsPrivateAddress(t *testing.T) {
 	}
 }
 
-func TestBuildPodSpawnTagsIncludesCompleteEnvironment(t *testing.T) {
+func TestBuildStartAgentTagSetsIncludesCompleteEnvironment(t *testing.T) {
 	config := HymatrixConfig{
 		LLMProvider: "custom",
 		LLMModel:    "deepseek-chat",
 		LLMBaseURL:  "https://llm.example/v1",
 		LLMAPIKey:   "llm-secret",
 	}
-	tags, err := buildPodSpawnTags(config, PodSpawnInput{
+	plain, secret, err := buildStartAgentTagSets(config, PodSpawnInput{
 		RuntimeType:        "hermes",
 		GatewayURL:         "https://hub.example",
 		GatewayAPIKey:      "gw_sk_test",
@@ -99,63 +235,48 @@ func TestBuildPodSpawnTagsIncludesCompleteEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{
-		"Container-Env-RUNTIME_TYPE":                    "hermes",
-		"Container-Env-HERMES_AGENT_LLM_PROVIDER":       "custom",
-		"Container-Env-HERMES_AGENT_LLM_MODEL":          "deepseek-chat",
-		"Container-Env-HERMES_AGENT_LLM_BASE_URL":       "https://llm.example/v1",
+	wantPlain := map[string]string{
+		"Action": "Start-Agent",
+		"Container-Env-HERMES_AGENT_LLM_PROVIDER": "custom",
+		"Container-Env-HERMES_AGENT_LLM_MODEL":    "deepseek-chat",
+		"Container-Env-HERMES_AGENT_LLM_BASE_URL": "https://llm.example/v1",
+		"Container-Env-HUB_GATEWAY_URL":           "https://hub.example",
+		"Container-Env-API_SERVER_ENABLED":        "true",
+	}
+	wantSecret := map[string]string{
 		"Container-Env-HERMES_AGENT_LLM_API_KEY":        "llm-secret",
-		"Container-Env-HUB_GATEWAY_URL":                 "https://hub.example",
 		"Container-Env-HUB_GATEWAY_API_KEY":             "gw_sk_test",
-		"Container-Env-API_SERVER_ENABLED":              "true",
 		"Container-Env-API_SERVER_KEY":                  "hermes-health-secret",
 		"Container-Env-HERMES_GATEWAY_TOKEN":            "hermes-health-secret",
 		"Container-Env-HERMES_AGENT_TELEGRAM_BOT_TOKEN": "telegram-token",
 	}
-	if len(tags) != len(want) {
-		t.Fatalf("tag count = %d, want %d", len(tags), len(want))
-	}
-	for _, tag := range tags {
-		value, ok := want[tag.Name]
-		if !ok {
-			t.Fatalf("unexpected tag %q", tag.Name)
-		}
-		if tag.Value != value {
-			t.Errorf("tag %s = %q, want %q", tag.Name, tag.Value, value)
-		}
-		delete(want, tag.Name)
-	}
-	if len(want) != 0 {
-		t.Fatalf("missing tags: %v", want)
-	}
+	assertTagsEqual(t, plain, wantPlain)
+	assertTagsEqual(t, secret, wantSecret)
 }
 
-func TestBuildPodSpawnTagsDefaultsProviderAndOmitsEmptyValues(t *testing.T) {
-	tags, err := buildPodSpawnTags(HymatrixConfig{}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gw_sk_test", HermesGatewayToken: "hermes-health-secret"})
+func TestBuildStartAgentTagSetsDefaultsProviderAndOmitsEmptyValues(t *testing.T) {
+	plain, secret, err := buildStartAgentTagSets(HymatrixConfig{}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gw_sk_test", HermesGatewayToken: "hermes-health-secret"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	values := make(map[string]string, len(tags))
-	for _, tag := range tags {
-		values[tag.Name] = tag.Value
-	}
+	values := tagsByName(plain)
 	if values["Container-Env-HERMES_AGENT_LLM_PROVIDER"] != "custom" {
 		t.Fatalf("provider = %q", values["Container-Env-HERMES_AGENT_LLM_PROVIDER"])
 	}
-	if _, exists := values["Container-Env-HERMES_AGENT_LLM_API_KEY"]; exists {
+	if _, exists := tagsByName(secret)["Container-Env-HERMES_AGENT_LLM_API_KEY"]; exists {
 		t.Fatal("empty LLM API key should not be emitted")
 	}
 }
 
-func TestBuildPodSpawnTagsRequiresHermesGatewayToken(t *testing.T) {
-	_, err := buildPodSpawnTags(HymatrixConfig{}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gw_sk_test"})
+func TestBuildStartAgentTagSetsRequiresHermesGatewayToken(t *testing.T) {
+	_, _, err := buildStartAgentTagSets(HymatrixConfig{}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gw_sk_test"})
 	if err == nil || !strings.Contains(err.Error(), "Hermes gateway token") {
 		t.Fatalf("error = %v", err)
 	}
 }
 
-func TestBuildPodSpawnTagsIncludesWeixinWithoutEncryptedPrefix(t *testing.T) {
-	tags, err := buildPodSpawnTags(HymatrixConfig{LLMAPIKey: "llm-secret"}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret", HermesGatewayToken: "gateway-token", WeixinAccountID: "bot@im.bot", WeixinToken: "weixin-token", WeixinBaseURL: "https://ilinkai.weixin.qq.com", WeixinAllowedUsers: "user@im.wechat"})
+func TestBuildStartAgentTagSetsPassesWeixinAsEncryptedParams(t *testing.T) {
+	_, tags, err := buildStartAgentTagSets(HymatrixConfig{LLMAPIKey: "llm-secret"}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret", HermesGatewayToken: "gateway-token", WeixinAccountID: "bot@im.bot", WeixinToken: "weixin-token", WeixinBaseURL: "https://ilinkai.weixin.qq.com", WeixinAllowedUsers: "user@im.wechat"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,8 +294,8 @@ func TestBuildPodSpawnTagsIncludesWeixinWithoutEncryptedPrefix(t *testing.T) {
 	}
 }
 
-func TestBuildPodSpawnTagsRejectsPartialWeixinCredentials(t *testing.T) {
-	_, err := buildPodSpawnTags(HymatrixConfig{}, PodSpawnInput{
+func TestBuildStartAgentTagSetsRejectsPartialWeixinCredentials(t *testing.T) {
+	_, _, err := buildStartAgentTagSets(HymatrixConfig{}, PodSpawnInput{
 		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
 		HermesGatewayToken: "gateway-token", WeixinToken: "partial-token",
 	})
