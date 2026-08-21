@@ -73,10 +73,6 @@ func (h *HymatrixClient) Spawn(_ context.Context, in PodSpawnInput) (string, err
 	if err != nil {
 		return "", err
 	}
-	startPlain, startSecret, err := buildStartAgentTagSets(h.config, in)
-	if err != nil {
-		return "", err
-	}
 	tags = append(tags, goarSchema.Tag{
 		Name:  "Hub-Spawn-Timestamp",
 		Value: strconv.FormatInt(time.Now().UnixNano(), 10),
@@ -85,10 +81,22 @@ func (h *HymatrixClient) Spawn(_ context.Context, in PodSpawnInput) (string, err
 	if err != nil {
 		return "", err
 	}
-	if _, err := h.sdk.SendMessageWithEncryptedParamsAndWait(res.Id, "", startPlain, startSecret); err != nil {
-		return res.Id, fmt.Errorf("start Hermes agent: %w", err)
-	}
 	return res.Id, nil
+}
+
+func (h *HymatrixClient) StartAgent(_ context.Context, pid string, in PodStartInput) error {
+	pid = strings.TrimSpace(pid)
+	if pid == "" {
+		return fmt.Errorf("pid is required")
+	}
+	plain, secret, err := buildStartAgentTagSets(h.config, in)
+	if err != nil {
+		return err
+	}
+	if _, err := h.sdk.SendMessageWithEncryptedParamsAndWait(pid, "", plain, secret); err != nil {
+		return fmt.Errorf("start Hermes agent: %w", err)
+	}
+	return nil
 }
 
 func buildPodSpawnTags(config HymatrixConfig, in PodSpawnInput) ([]goarSchema.Tag, error) {
@@ -100,7 +108,7 @@ func buildPodSpawnTags(config HymatrixConfig, in PodSpawnInput) ([]goarSchema.Ta
 	return []goarSchema.Tag{{Name: containerEnvTagPrefix + "RUNTIME_TYPE", Value: runtimeType}}, nil
 }
 
-func buildStartAgentTagSets(config HymatrixConfig, in PodSpawnInput) ([]goarSchema.Tag, []goarSchema.Tag, error) {
+func buildStartAgentTagSets(config HymatrixConfig, in PodStartInput) ([]goarSchema.Tag, []goarSchema.Tag, error) {
 	if strings.TrimSpace(in.GatewayURL) == "" || strings.TrimSpace(in.GatewayAPIKey) == "" {
 		return nil, nil, fmt.Errorf("gateway URL and API key are required")
 	}
@@ -156,8 +164,12 @@ func buildStartAgentTagSets(config HymatrixConfig, in PodSpawnInput) ([]goarSche
 }
 
 type PodSpawnInput struct {
-	RuntimeType, GatewayURL, GatewayAPIKey, BotToken, HermesGatewayToken string
-	WeixinAccountID, WeixinToken, WeixinBaseURL, WeixinAllowedUsers      string
+	RuntimeType string
+}
+
+type PodStartInput struct {
+	GatewayURL, GatewayAPIKey, BotToken, HermesGatewayToken         string
+	WeixinAccountID, WeixinToken, WeixinBaseURL, WeixinAllowedUsers string
 }
 
 func fetchHymatrixNodeInfo(ctx context.Context, nodeURL string) (HymatrixNodeInfo, error) {

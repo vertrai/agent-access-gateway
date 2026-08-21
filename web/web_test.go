@@ -197,14 +197,14 @@ func TestHymatrixPageIncludesLiveTransactionPreview(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/hymatrix", nil))
 	body := recorder.Body.String()
-	for _, expected := range []string{"待发送交易", "Envelope", "Protocol tags", "Container environment", "Hub-Spawn-Timestamp", "Container-Env-HERMES_AGENT_LLM_API_KEY", "显示敏感值", "复制预览", "telegramBotLink", "telegramAcquireHint", "当前 API Key 未开通 Telegram 资源", "/v1/admin/telegram/bot-link", "01 · Pod 基础配置", "02 · Node 配置", "http://52.220.233.136:8081", "Y4U_9tWd56KL0SmzNYNcypLA1uOHsw24cRtPOEB1kQs", "randomPodName", "advanced-config"} {
+	for _, expected := range []string{"待发送 Spawn 交易", "Envelope", "Protocol tags", "Container environment", "Hub-Spawn-Timestamp", "显示敏感值", "复制预览", "telegramBotLink", "telegramAcquireHint", "当前 API Key 未开通 Telegram 资源", "/v1/admin/telegram/bot-link", "01 · Pod 基础配置", "02 · Node 配置", "http://52.220.233.136:8081", "Y4U_9tWd56KL0SmzNYNcypLA1uOHsw24cRtPOEB1kQs", "randomPodName", "advanced-config"} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("Hymatrix page is missing %q", expected)
 		}
 	}
 }
 
-func TestHymatrixPagePreviewsSpawnThenEncryptedStartAgentTransactions(t *testing.T) {
+func TestHymatrixPageBuildsSpawnAndStartAgentSeparately(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	RegisterRoutes(router, allowAll)
@@ -212,9 +212,10 @@ func TestHymatrixPagePreviewsSpawnThenEncryptedStartAgentTransactions(t *testing
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/hymatrix", nil))
 	body := recorder.Body.String()
 	for _, expected := range []string{
-		"01 · Spawn transaction",
-		"02 · Start-Agent transaction",
-		"Spawn 成功返回 PID 后发送",
+		"此处只构建 Spawn 交易",
+		`id="startAgentDialog"`,
+		`data-pod-start=`,
+		`/v1/admin/hymatrix/pods/${encodeURIComponent($("startPodId").value)}/start`,
 		`["Container-Env-RUNTIME_TYPE", $("runtimeType").value.trim(), false]`,
 		`["Action", "Start-Agent", false]`,
 		`"Encrypted-Container-Env-HERMES_AGENT_LLM_API_KEY"`,
@@ -223,7 +224,7 @@ func TestHymatrixPagePreviewsSpawnThenEncryptedStartAgentTransactions(t *testing
 		`"Encrypted-Container-Env-HERMES_AGENT_WEIXIN_TOKEN"`,
 	} {
 		if !strings.Contains(body, expected) {
-			t.Errorf("Hymatrix transaction sequence preview is missing %q", expected)
+			t.Errorf("Hymatrix split transaction UI is missing %q", expected)
 		}
 	}
 }
@@ -263,12 +264,24 @@ func TestHymatrixSpawnRequiresCompleteForm(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/hymatrix", nil))
 	body := recorder.Body.String()
+	spawnFormStart := strings.Index(body, `<form id="form">`)
+	if spawnFormStart < 0 {
+		t.Fatal("Spawn form not found")
+	}
+	spawnFormEnd := strings.Index(body[spawnFormStart:], `</form>`)
+	if spawnFormEnd < 0 {
+		t.Fatal("Spawn form closing tag not found")
+	}
+	spawnForm := body[spawnFormStart : spawnFormStart+spawnFormEnd]
+	for _, startOnlyField := range []string{`id="accessKeyId"`, `id="gatewayUrl"`, `id="llmApiKey"`, `id="hermesGatewayToken"`} {
+		if strings.Contains(spawnForm, startOnlyField) {
+			t.Errorf("Spawn form contains Start-Agent-only field %q", startOnlyField)
+		}
+	}
 	for _, expected := range []string{
 		`id="spawn" type="submit" disabled`,
 		"function isSpawnFormComplete()",
-		`"botToken"`,
 		`"scheduler"`,
-		`"llmProvider"`,
 		`$("form").checkValidity()`,
 		`$("spawn").disabled = spawnSubmitting || !ready`,
 		`spawnRequirements`,

@@ -65,15 +65,37 @@ func (s *recordingPodSDK) SendMessageWithEncryptedParamsAndWait(target, _ string
 	return &serverSchema.Response{Id: "message-start"}, nil
 }
 
-func TestSpawnWaitsThenSendsEncryptedStartAgent(t *testing.T) {
+func TestSpawnOnlyBuildsSpawnTransaction(t *testing.T) {
 	fake := &recordingPodSDK{}
 	client := &HymatrixClient{config: HymatrixConfig{
 		Module: "module", Scheduler: "scheduler", LLMProvider: "custom",
 		LLMModel: "model", LLMBaseURL: "https://llm.example/v1", LLMAPIKey: "llm-secret",
 	}, sdk: fake}
 
-	pid, err := client.Spawn(t.Context(), PodSpawnInput{
-		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
+	pid, err := client.Spawn(t.Context(), PodSpawnInput{RuntimeType: "hermes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pid != "pid-new" {
+		t.Fatalf("pid = %q", pid)
+	}
+	if strings.Join(fake.calls, ",") != "spawn" {
+		t.Fatalf("calls = %v", fake.calls)
+	}
+	spawnValues := tagsByName(fake.spawnTags)
+	if spawnValues["Container-Env-RUNTIME_TYPE"] != "hermes" || spawnValues["Hub-Spawn-Timestamp"] == "" || len(spawnValues) != 2 {
+		t.Fatalf("spawn tags = %v", spawnValues)
+	}
+}
+
+func TestStartAgentBuildsIndependentEncryptedMessage(t *testing.T) {
+	fake := &recordingPodSDK{}
+	client := &HymatrixClient{config: HymatrixConfig{
+		LLMProvider: "custom", LLMModel: "model", LLMBaseURL: "https://llm.example/v1", LLMAPIKey: "llm-secret",
+	}, sdk: fake}
+
+	err := client.StartAgent(t.Context(), "pid-existing", PodStartInput{
+		GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
 		HermesGatewayToken: "hermes-secret", BotToken: "telegram-secret",
 		WeixinAccountID: "bot@im.bot", WeixinToken: "weixin-secret",
 		WeixinBaseURL: "https://ilinkai.weixin.qq.com", WeixinAllowedUsers: "user@im.wechat",
@@ -81,18 +103,11 @@ func TestSpawnWaitsThenSendsEncryptedStartAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pid != "pid-new" {
-		t.Fatalf("pid = %q", pid)
-	}
-	if strings.Join(fake.calls, ",") != "spawn,start-agent" {
+	if strings.Join(fake.calls, ",") != "start-agent" {
 		t.Fatalf("calls = %v", fake.calls)
 	}
-	if fake.startTarget != pid {
-		t.Fatalf("start target = %q, want %q", fake.startTarget, pid)
-	}
-	spawnValues := tagsByName(fake.spawnTags)
-	if spawnValues["Container-Env-RUNTIME_TYPE"] != "hermes" || spawnValues["Hub-Spawn-Timestamp"] == "" || len(spawnValues) != 2 {
-		t.Fatalf("spawn tags = %v", spawnValues)
+	if fake.startTarget != "pid-existing" {
+		t.Fatalf("start target = %q", fake.startTarget)
 	}
 	assertTagsEqual(t, fake.startPlain, map[string]string{
 		"Action": "Start-Agent",
@@ -120,8 +135,7 @@ func TestSpawnFailureDoesNotSendStartAgent(t *testing.T) {
 	client := &HymatrixClient{config: HymatrixConfig{Module: "module", Scheduler: "scheduler"}, sdk: fake}
 
 	_, err := client.Spawn(t.Context(), PodSpawnInput{
-		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
-		HermesGatewayToken: "hermes-secret",
+		RuntimeType: "hermes",
 	})
 	if err == nil || !strings.Contains(err.Error(), "spawn rejected") {
 		t.Fatalf("error = %v", err)
@@ -131,21 +145,18 @@ func TestSpawnFailureDoesNotSendStartAgent(t *testing.T) {
 	}
 }
 
-func TestStartAgentFailureReturnsSpawnedPID(t *testing.T) {
+func TestStartAgentFailureReturnsMessageError(t *testing.T) {
 	fake := &recordingPodSDK{startErr: errors.New("message rejected")}
 	client := &HymatrixClient{config: HymatrixConfig{Module: "module", Scheduler: "scheduler"}, sdk: fake}
 
-	pid, err := client.Spawn(t.Context(), PodSpawnInput{
-		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
+	err := client.StartAgent(t.Context(), "pid-new", PodStartInput{
+		GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
 		HermesGatewayToken: "hermes-secret",
 	})
 	if err == nil || !strings.Contains(err.Error(), "start Hermes agent: message rejected") {
 		t.Fatalf("error = %v", err)
 	}
-	if pid != "pid-new" {
-		t.Fatalf("pid = %q, want spawned PID", pid)
-	}
-	if strings.Join(fake.calls, ",") != "spawn,start-agent" {
+	if strings.Join(fake.calls, ",") != "start-agent" {
 		t.Fatalf("calls = %v", fake.calls)
 	}
 }
@@ -170,11 +181,11 @@ func tagsByName(tags []goarSchema.Tag) map[string]string {
 	return values
 }
 
-func TestSpawnRequiresNodeEncryptionPublicKeyForStartAgent(t *testing.T) {
+func TestStartAgentRequiresNodeEncryptionPublicKey(t *testing.T) {
 	fake := &nodeWithoutEncryptionKeySDK{}
 	client := &HymatrixClient{config: HymatrixConfig{Module: "module", Scheduler: "scheduler", LLMAPIKey: "llm-secret"}, sdk: fake}
-	_, err := client.Spawn(t.Context(), PodSpawnInput{
-		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
+	err := client.StartAgent(t.Context(), "pid-test", PodStartInput{
+		GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
 		HermesGatewayToken: "gateway-token", BotToken: "telegram-token",
 		WeixinAccountID: "bot@im.bot", WeixinToken: "weixin-token",
 		WeixinBaseURL: "https://ilinkai.weixin.qq.com", WeixinAllowedUsers: "user@im.wechat",
@@ -225,8 +236,7 @@ func TestBuildStartAgentTagSetsIncludesCompleteEnvironment(t *testing.T) {
 		LLMBaseURL:  "https://llm.example/v1",
 		LLMAPIKey:   "llm-secret",
 	}
-	plain, secret, err := buildStartAgentTagSets(config, PodSpawnInput{
-		RuntimeType:        "hermes",
+	plain, secret, err := buildStartAgentTagSets(config, PodStartInput{
 		GatewayURL:         "https://hub.example",
 		GatewayAPIKey:      "gw_sk_test",
 		BotToken:           "telegram-token",
@@ -255,7 +265,7 @@ func TestBuildStartAgentTagSetsIncludesCompleteEnvironment(t *testing.T) {
 }
 
 func TestBuildStartAgentTagSetsDefaultsProviderAndOmitsEmptyValues(t *testing.T) {
-	plain, secret, err := buildStartAgentTagSets(HymatrixConfig{}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gw_sk_test", HermesGatewayToken: "hermes-health-secret"})
+	plain, secret, err := buildStartAgentTagSets(HymatrixConfig{}, PodStartInput{GatewayURL: "https://hub.example", GatewayAPIKey: "gw_sk_test", HermesGatewayToken: "hermes-health-secret"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,14 +279,14 @@ func TestBuildStartAgentTagSetsDefaultsProviderAndOmitsEmptyValues(t *testing.T)
 }
 
 func TestBuildStartAgentTagSetsRequiresHermesGatewayToken(t *testing.T) {
-	_, _, err := buildStartAgentTagSets(HymatrixConfig{}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gw_sk_test"})
+	_, _, err := buildStartAgentTagSets(HymatrixConfig{}, PodStartInput{GatewayURL: "https://hub.example", GatewayAPIKey: "gw_sk_test"})
 	if err == nil || !strings.Contains(err.Error(), "Hermes gateway token") {
 		t.Fatalf("error = %v", err)
 	}
 }
 
 func TestBuildStartAgentTagSetsPassesWeixinAsEncryptedParams(t *testing.T) {
-	_, tags, err := buildStartAgentTagSets(HymatrixConfig{LLMAPIKey: "llm-secret"}, PodSpawnInput{RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret", HermesGatewayToken: "gateway-token", WeixinAccountID: "bot@im.bot", WeixinToken: "weixin-token", WeixinBaseURL: "https://ilinkai.weixin.qq.com", WeixinAllowedUsers: "user@im.wechat"})
+	_, tags, err := buildStartAgentTagSets(HymatrixConfig{LLMAPIKey: "llm-secret"}, PodStartInput{GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret", HermesGatewayToken: "gateway-token", WeixinAccountID: "bot@im.bot", WeixinToken: "weixin-token", WeixinBaseURL: "https://ilinkai.weixin.qq.com", WeixinAllowedUsers: "user@im.wechat"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,8 +305,8 @@ func TestBuildStartAgentTagSetsPassesWeixinAsEncryptedParams(t *testing.T) {
 }
 
 func TestBuildStartAgentTagSetsRejectsPartialWeixinCredentials(t *testing.T) {
-	_, _, err := buildStartAgentTagSets(HymatrixConfig{}, PodSpawnInput{
-		RuntimeType: "hermes", GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
+	_, _, err := buildStartAgentTagSets(HymatrixConfig{}, PodStartInput{
+		GatewayURL: "https://hub.example", GatewayAPIKey: "gateway-secret",
 		HermesGatewayToken: "gateway-token", WeixinToken: "partial-token",
 	})
 	if err == nil || !strings.Contains(err.Error(), "complete set") {

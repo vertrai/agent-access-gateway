@@ -5,6 +5,7 @@ import "time"
 const (
 	PodStatusSpawning = "spawning"
 	PodStatusSpawned  = "spawned"
+	PodStatusStarting = "starting"
 	PodStatusRunning  = "running"
 	PodStatusFailed   = "failed"
 )
