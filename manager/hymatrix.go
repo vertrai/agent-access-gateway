@@ -14,6 +14,7 @@ import (
 
 	"github.com/everFinance/goether"
 	"github.com/hymatrix/hymx/sdk"
+	serverSchema "github.com/hymatrix/hymx/server/schema"
 	"github.com/permadao/goar"
 	goarSchema "github.com/permadao/goar/schema"
 )
@@ -44,7 +45,12 @@ type HymatrixConfig struct {
 
 type HymatrixClient struct {
 	config HymatrixConfig
-	sdk    *sdk.SDK
+	sdk    hymatrixSpawnSDK
+}
+
+type hymatrixSpawnSDK interface {
+	SpawnAndWait(module, scheduler string, params []goarSchema.Tag) (*serverSchema.Response, error)
+	SendMessageWithEncryptedParamsAndWait(target, data string, params, encryptedParams []goarSchema.Tag) (*serverSchema.Response, error)
 }
 
 func NewHymatrixClient(config HymatrixConfig) (*HymatrixClient, error) {
@@ -78,46 +84,92 @@ func (h *HymatrixClient) Spawn(_ context.Context, in PodSpawnInput) (string, err
 	return res.Id, nil
 }
 
+func (h *HymatrixClient) StartAgent(_ context.Context, pid string, in PodStartInput) error {
+	pid = strings.TrimSpace(pid)
+	if pid == "" {
+		return fmt.Errorf("pid is required")
+	}
+	plain, secret, err := buildStartAgentTagSets(h.config, in)
+	if err != nil {
+		return err
+	}
+	if _, err := h.sdk.SendMessageWithEncryptedParamsAndWait(pid, "", plain, secret); err != nil {
+		return fmt.Errorf("start Hermes agent: %w", err)
+	}
+	return nil
+}
+
 func buildPodSpawnTags(config HymatrixConfig, in PodSpawnInput) ([]goarSchema.Tag, error) {
-	if strings.TrimSpace(in.RuntimeType) == "" {
+	_ = config
+	runtimeType := strings.TrimSpace(in.RuntimeType)
+	if runtimeType == "" {
 		return nil, fmt.Errorf("runtimeType is required")
 	}
+	return []goarSchema.Tag{{Name: containerEnvTagPrefix + "RUNTIME_TYPE", Value: runtimeType}}, nil
+}
+
+func buildStartAgentTagSets(config HymatrixConfig, in PodStartInput) ([]goarSchema.Tag, []goarSchema.Tag, error) {
 	if strings.TrimSpace(in.GatewayURL) == "" || strings.TrimSpace(in.GatewayAPIKey) == "" {
-		return nil, fmt.Errorf("gateway URL and API key are required")
+		return nil, nil, fmt.Errorf("gateway URL and API key are required")
 	}
 	if strings.TrimSpace(in.HermesGatewayToken) == "" {
-		return nil, fmt.Errorf("Hermes gateway token is required")
+		return nil, nil, fmt.Errorf("Hermes gateway token is required")
+	}
+	weixinValues := []string{in.WeixinAccountID, in.WeixinToken, in.WeixinBaseURL, in.WeixinAllowedUsers}
+	weixinConfigured := 0
+	for _, value := range weixinValues {
+		if strings.TrimSpace(value) != "" {
+			weixinConfigured++
+		}
+	}
+	if weixinConfigured != 0 && weixinConfigured != len(weixinValues) {
+		return nil, nil, fmt.Errorf("Weixin account ID, token, base URL and allowed users are required as a complete set")
 	}
 	provider := strings.TrimSpace(config.LLMProvider)
 	if provider == "" {
 		provider = "custom"
 	}
-	values := [][2]string{
-		{"RUNTIME_TYPE", in.RuntimeType},
+	plainValues := [][2]string{
 		{"HERMES_AGENT_LLM_PROVIDER", provider},
 		{"HERMES_AGENT_LLM_MODEL", config.LLMModel},
 		{"HERMES_AGENT_LLM_BASE_URL", config.LLMBaseURL},
-		{"HERMES_AGENT_LLM_API_KEY", config.LLMAPIKey},
 		{"HUB_GATEWAY_URL", in.GatewayURL},
-		{"HUB_GATEWAY_API_KEY", in.GatewayAPIKey},
 		{"API_SERVER_ENABLED", "true"},
-		{"API_SERVER_KEY", in.HermesGatewayToken},
-		{"HERMES_GATEWAY_TOKEN", in.HermesGatewayToken},
 	}
+	secretValues := [][2]string{{"HERMES_AGENT_LLM_API_KEY", config.LLMAPIKey}, {"HUB_GATEWAY_API_KEY", in.GatewayAPIKey}, {"API_SERVER_KEY", in.HermesGatewayToken}, {"HERMES_GATEWAY_TOKEN", in.HermesGatewayToken}}
 	if in.BotToken != "" {
-		values = append(values, [2]string{"HERMES_AGENT_TELEGRAM_BOT_TOKEN", in.BotToken})
+		secretValues = append(secretValues, [2]string{"HERMES_AGENT_TELEGRAM_BOT_TOKEN", in.BotToken})
 	}
-	tags := make([]goarSchema.Tag, 0, len(values))
-	for _, value := range values {
+	for _, value := range [][2]string{
+		{"HERMES_AGENT_WEIXIN_ACCOUNT_ID", in.WeixinAccountID},
+		{"HERMES_AGENT_WEIXIN_TOKEN", in.WeixinToken},
+		{"HERMES_AGENT_WEIXIN_BASE_URL", in.WeixinBaseURL},
+		{"HERMES_AGENT_WEIXIN_ALLOWED_USERS", in.WeixinAllowedUsers},
+	} {
 		if value[1] != "" {
-			tags = append(tags, goarSchema.Tag{Name: containerEnvTagPrefix + value[0], Value: value[1]})
+			secretValues = append(secretValues, value)
 		}
 	}
-	return tags, nil
+	toTags := func(values [][2]string) []goarSchema.Tag {
+		tags := make([]goarSchema.Tag, 0, len(values))
+		for _, value := range values {
+			if value[1] != "" {
+				tags = append(tags, goarSchema.Tag{Name: containerEnvTagPrefix + value[0], Value: value[1]})
+			}
+		}
+		return tags
+	}
+	plain := append([]goarSchema.Tag{{Name: "Action", Value: "Start-Agent"}}, toTags(plainValues)...)
+	return plain, toTags(secretValues), nil
 }
 
 type PodSpawnInput struct {
-	RuntimeType, GatewayURL, GatewayAPIKey, BotToken, HermesGatewayToken string
+	RuntimeType string
+}
+
+type PodStartInput struct {
+	GatewayURL, GatewayAPIKey, BotToken, HermesGatewayToken         string
+	WeixinAccountID, WeixinToken, WeixinBaseURL, WeixinAllowedUsers string
 }
 
 func fetchHymatrixNodeInfo(ctx context.Context, nodeURL string) (HymatrixNodeInfo, error) {

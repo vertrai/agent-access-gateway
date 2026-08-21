@@ -10,6 +10,15 @@ import (
 	"time"
 )
 
+func authenticateAdmin(service *Manager, request *http.Request) {
+	service.adminAuth.allowed["admin@example.com"] = struct{}{}
+	token, err := service.adminAuth.issueSession(adminIdentity{Subject: "google-subject", Email: "admin@example.com"})
+	if err != nil {
+		panic(err)
+	}
+	request.AddCookie(&http.Cookie{Name: adminSessionCookie, Value: token})
+}
+
 func TestInfo(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/info", nil)
@@ -20,8 +29,8 @@ func TestInfo(t *testing.T) {
 	}
 }
 
-func TestAdminRequiresManagerKey(t *testing.T) {
-	service, _ := New("test", Config{AdminAPIKey: "manager-secret"}, nil)
+func TestAdminRequiresGoogleSession(t *testing.T) {
+	service, _ := New("test", Config{}, nil)
 	recorder := httptest.NewRecorder()
 	service.router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/v1/admin/users", nil))
 	if recorder.Code != http.StatusUnauthorized {
@@ -41,10 +50,10 @@ func TestAdminResourceProxyUsesInternalKey(t *testing.T) {
 		_, _ = io.WriteString(w, `{"items":[]}`)
 	}))
 	defer resources.Close()
-	service, _ := New("test", Config{AdminAPIKey: "manager-secret", Resources: ResourcesConfig{BaseURL: resources.URL, AdminAPIKey: "internal-secret", Timeout: time.Second}}, nil)
+	service, _ := New("test", Config{Resources: ResourcesConfig{BaseURL: resources.URL, AdminAPIKey: "internal-secret", Timeout: time.Second}}, nil)
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/v1/admin/google/accounts", nil)
-	request.Header.Set("Authorization", "Bearer manager-secret")
+	authenticateAdmin(service, request)
 	service.router().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"items"`) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
@@ -62,10 +71,10 @@ func TestAdminBrowserCloseProxyForwardsSessionID(t *testing.T) {
 		_, _ = io.WriteString(w, `{"closed":true}`)
 	}))
 	defer resources.Close()
-	service, _ := New("test", Config{AdminAPIKey: "manager-secret", Resources: ResourcesConfig{BaseURL: resources.URL, AdminAPIKey: "internal-secret", Timeout: time.Second}}, nil)
+	service, _ := New("test", Config{Resources: ResourcesConfig{BaseURL: resources.URL, AdminAPIKey: "internal-secret", Timeout: time.Second}}, nil)
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/v1/admin/browser/sessions/brw_123/close", nil)
-	request.Header.Set("Authorization", "Bearer manager-secret")
+	authenticateAdmin(service, request)
 	service.router().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"closed":true`) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
@@ -94,12 +103,30 @@ func TestSharedAdminFrontend(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/admin", nil)
 	service, _ := New("test", Config{}, nil)
+	authenticateAdmin(service, request)
 	service.router().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d", recorder.Code)
 	}
 	if got := recorder.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
 		t.Fatalf("content type = %q", got)
+	}
+}
+
+func TestAdminFrontendRedirectsToLoginWithoutSession(t *testing.T) {
+	service, _ := New("test", Config{}, nil)
+	for _, path := range []string{"/admin", "/admin/users", "/admin/google", "/admin/browser", "/admin/telegram", "/admin/weixin", "/admin/hymatrix", "/admin/test"} {
+		recorder := httptest.NewRecorder()
+		service.router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusFound || recorder.Header().Get("Location") != "/admin/login" {
+			t.Fatalf("path=%s status=%d location=%q", path, recorder.Code, recorder.Header().Get("Location"))
+		}
+	}
+
+	login := httptest.NewRecorder()
+	service.router().ServeHTTP(login, httptest.NewRequest(http.MethodGet, "/admin/login", nil))
+	if login.Code != http.StatusOK || !strings.Contains(login.Body.String(), "Google 账号") {
+		t.Fatalf("status=%d body=%s", login.Code, login.Body.String())
 	}
 }
 
@@ -117,10 +144,10 @@ func TestResolveTelegramBotLink(t *testing.T) {
 	})}
 	defer func() { telegramAPIHTTPClient = originalClient }()
 
-	service, _ := New("test", Config{AdminAPIKey: "manager-secret"}, nil)
+	service, _ := New("test", Config{}, nil)
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/v1/admin/telegram/bot-link", strings.NewReader(`{"botToken":"123456:secret"}`))
-	request.Header.Set("Authorization", "Bearer manager-secret")
+	authenticateAdmin(service, request)
 	request.Header.Set("Content-Type", "application/json")
 	service.router().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK {
