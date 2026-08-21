@@ -8,9 +8,9 @@ auth:
   google:
     clientId: 6413958546-eo8gja7e3erq219e7vj8vqrgrjum0hl9.apps.googleusercontent.com
     allowedEmails:
-      - admin@example.com
+      - sandy@ever.vision
   jwt:
-    issuer: agent-hub-auth
+    issuer: hub-auth
     # 相对于本配置文件解析。共享私钥表示 manager 与 platformServer 属于同一签名信任域。
     privateKeyFile: ../../../agent-hub/cmd/platformServer/data/auth_private.pem
     publicKeyFile: ../../../agent-hub/cmd/platformServer/data/auth_public.pem
